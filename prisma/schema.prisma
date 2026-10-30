@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Module {
+  id             String          @id @default(uuid())
+  title          String
+  color          String          @default("#3b82f6")
+  createdAt      DateTime        @default(now())
+  cards          Card[]
+  recurringTasks RecurringTask[] // Ligação do módulo com a planilha
+}
+
+// NOVA TABELA: PLANILHA DE ROTINAS E FINANÇAS
+model RecurringTask {
+  id        String   @id @default(uuid())
+  title     String
+  amount    Float?   // Valor (R$) para controle financeiro
+  dueDay    Int?     // Dia do vencimento (ex: 15)
+  active    Boolean  @default(true)
+  
+  moduleId  String?
+  module    Module?  @relation(fields: [moduleId], references: [id])
+  
+  cards     Card[]   // Cards que foram gerados a partir desta rotina
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Board {
+  id        String   @id @default(uuid())
+  title     String
+  createdAt DateTime @default(now())
+  columns   Column[]
+}
+
+model Column {
+  id      String @id @default(uuid())
+  title   String
+  order   Int
+  isDone  Boolean @default(false)
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id])
+  cards   Card[]
+}
+
+model Card {
+  id              String    @id @default(uuid())
+  title           String
+  description     String?
+  priority        String    @default("Normal")
+  dueDate         DateTime?
+  emailAlert      Boolean   @default(true)
+  
+  completed       Boolean   @default(false)
+  completedAt     DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  order           Int
+  columnId        String
+  column          Column    @relation(fields: [columnId], references: [id])
+  
+  moduleId        String?
+  module          Module?   @relation(fields: [moduleId], references: [id])
+
+  // Identifica se este card veio da planilha de finanças
+  recurringTaskId String?
+  recurringTask   RecurringTask? @relation(fields: [recurringTaskId], references: [id])
+
+  history         History[]
+  comments        Comment[]
+}
+
+model History {
+  id        String   @id @default(uuid())
+  action    String
+  details   String
+  user      String
+  timestamp DateTime @default(now())
+  
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  text      String
+  user      String
+  createdAt DateTime @default(now())
+  
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
