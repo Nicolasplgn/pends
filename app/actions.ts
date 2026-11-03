@@ -5,6 +5,18 @@ import { prisma } from "../lib/prisma";
 
 const CURRENT_USER = "Nicolas";
 
+// Função para cravar a data ao meio-dia (elimina o bug do dia anterior no Brasil UTC-3)
+function parseLocalDateToMidday(dateStr?: string | null): Date | null {
+  if (!dateStr || !dateStr.trim()) return null;
+  if (dateStr.includes("-")) {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  }
+  const d = new Date(dateStr);
+  d.setUTCHours(12, 0, 0, 0);
+  return d;
+}
+
 // 1. Módulos
 export async function getModules() {
   let modules = await prisma.module.findMany({ orderBy: { createdAt: "asc" } });
@@ -44,6 +56,10 @@ export async function deleteModule(id: string) {
     where: { moduleId: id },
     data: { moduleId: null }
   });
+  await prisma.recurringTask.updateMany({
+    where: { moduleId: id },
+    data: { moduleId: null }
+  });
   await prisma.module.delete({ where: { id } });
   revalidatePath("/");
 }
@@ -76,7 +92,7 @@ export async function deleteColumn(id: string) {
   revalidatePath("/");
 }
 
-// 3. Quadro Kanban (Include tipado de forma idêntica para não dar conflito no TS)
+// 3. Quadro Kanban
 const boardInclude = {
   columns: {
     include: { 
@@ -118,7 +134,7 @@ export async function getBoardData() {
   }
 }
 
-// 4. Métricas do Dashboard 100% Determinísticas
+// 4. Métricas
 export async function getDashboardStats() {
   const cards = await prisma.card.findMany({
     include: { module: true, column: true }
@@ -128,7 +144,6 @@ export async function getDashboardStats() {
   const now = new Date();
   const total = cards.length;
   
-  // Conclusão garantida pela flag 'completed' ou 'isDone'
   const completed = cards.filter(c => c.completed || c.column?.isDone).length;
   const inProgress = cards.filter(c => !c.completed && !c.column?.isDone && c.column?.order !== 0).length;
   const todo = total - completed - inProgress;
@@ -167,7 +182,7 @@ export async function getDashboardStats() {
   return { total, completed, inProgress, todo, urgent, overdue, completionRate, moduleMetrics, upcomingDeadlines };
 }
 
-// 5. Cards & Movimentação
+// 5. Cards com Data Corrigida ao Meio-dia
 export async function createCard(
   columnId: string, 
   title: string, 
@@ -187,7 +202,7 @@ export async function createCard(
       priority,
       moduleId: moduleId ? moduleId : null,
       description,
-      dueDate: dueDate ? new Date(dueDate) : null,
+      dueDate: parseLocalDateToMidday(dueDate),
       order: count,
       completed: isCompleted,
       completedAt: isCompleted ? new Date() : null,
@@ -255,7 +270,7 @@ export async function toggleCardCompletion(cardId: string) {
       history: {
         create: {
           action: nextState ? "Conclusão" : "Reabertura",
-          details: nextState ? "Marcou como concluída manualmente" : "Reabriu a pendência",
+          details: nextState ? "Marcou como concluída" : "Reabriu a pendência",
           user: CURRENT_USER
         }
       }
@@ -298,7 +313,7 @@ export async function updateCardDetails(
       title,
       description,
       priority,
-      dueDate: dueDate ? new Date(dueDate) : null,
+      dueDate: parseLocalDateToMidday(dueDate),
       moduleId: moduleId ? moduleId : null
     }
   });
@@ -317,10 +332,7 @@ export async function addComment(cardId: string, text: string) {
   revalidatePath("/");
 }
 
-// =========================================================================
-// 6. ROTINAS E CONTROLE FINANCEIRO (PLANILHA)
-// =========================================================================
-
+// 6. Rotinas & Finanças
 export async function getRecurringTasks() {
   return await prisma.recurringTask.findMany({
     include: { 
@@ -336,7 +348,12 @@ export async function getRecurringTasks() {
   });
 }
 
-export async function createRecurringTask(title: string, amount: number | null, dueDay: number | null, moduleId: string) {
+export async function createRecurringTask(
+  title: string, 
+  amount: number | null, 
+  dueDay: number | null, 
+  moduleId: string
+) {
   await prisma.recurringTask.create({
     data: {
       title,
@@ -347,6 +364,7 @@ export async function createRecurringTask(title: string, amount: number | null, 
   });
   revalidatePath("/");
 }
+
 export async function updateRecurringTask(
   id: string, 
   title: string, 
@@ -366,67 +384,72 @@ export async function updateRecurringTask(
   revalidatePath("/");
 }
 
+export async function quickUpdateRecurringAmount(id: string, amount: number | null) {
+  await prisma.recurringTask.update({
+    where: { id },
+    data: { amount }
+  });
+  revalidatePath("/");
+}
+
 export async function deleteRecurringTask(id: string) {
   await prisma.recurringTask.delete({ where: { id } });
   revalidatePath("/");
 }
 
-  // Gera o card vinculado ao mês e ano exatos que você está visualizando
-  export async function spawnCardFromRecurring(
-    recurringId: string, 
-    customAmount?: number | null,
-    targetMonth?: number,
-    targetYear?: number
-  ) {
-    const recurring = await prisma.recurringTask.findUnique({ where: { id: recurringId } });
-    if (!recurring) return;
+export async function spawnCardFromRecurring(
+  recurringId: string, 
+  customAmount?: number | null,
+  targetMonth?: number,
+  targetYear?: number
+) {
+  const recurring = await prisma.recurringTask.findUnique({ where: { id: recurringId } });
+  if (!recurring) return;
 
-    const firstCol = await prisma.column.findFirst({ orderBy: { order: "asc" } });
-    if (!firstCol) return;
+  const firstCol = await prisma.column.findFirst({ orderBy: { order: "asc" } });
+  if (!firstCol) return;
 
-    const count = await prisma.card.count({ where: { columnId: firstCol.id } });
+  const count = await prisma.card.count({ where: { columnId: firstCol.id } });
 
-    const now = new Date();
-    const month = (targetMonth !== undefined && targetMonth !== null) ? targetMonth : now.getMonth();
-    const year = (targetYear !== undefined && targetYear !== null) ? targetYear : now.getFullYear();
-    const day = recurring.dueDay || 1;
+  const now = new Date();
+  const month = (targetMonth !== undefined && targetMonth !== null) ? targetMonth : now.getMonth();
+  const year = (targetYear !== undefined && targetYear !== null) ? targetYear : now.getFullYear();
+  const day = recurring.dueDay || 1;
 
-    // Cria a data exata no mês de referência selecionado
-    const nextDueDate = new Date(year, month, day, 12, 0, 0);
+  // Data fixada ao meio-dia UTC (12:00:00) para nunca mudar de dia no Brasil
+  const nextDueDate = new Date(Date.UTC(year, month, day, 12, 0, 0));
+  const finalAmount = (customAmount !== undefined && customAmount !== null) ? customAmount : recurring.amount;
 
-    const finalAmount = (customAmount !== undefined && customAmount !== null) ? customAmount : recurring.amount;
+  const formattedValue = finalAmount
+    ? `R$ ${finalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : null;
 
-    const formattedValue = finalAmount
-      ? `R$ ${finalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      : null;
+  const cardTitle = formattedValue 
+    ? `${recurring.title} (${formattedValue})` 
+    : recurring.title;
 
-    const cardTitle = formattedValue 
-      ? `${recurring.title} (${formattedValue})` 
-      : recurring.title;
+  const desc = formattedValue 
+    ? `Fatura / Conta gerada a partir das Rotinas.\nValor: ${formattedValue}` 
+    : `Gerado a partir das Rotinas.`;
 
-    const desc = formattedValue 
-      ? `Fatura / Conta gerada a partir das Rotinas.\nValor: ${formattedValue}` 
-      : `Gerado a partir das Rotinas.`;
-
-    await prisma.card.create({
-      data: {
-        title: cardTitle,
-        columnId: firstCol.id,
-        moduleId: recurring.moduleId,
-        priority: "Alta",
-        description: desc,
-        dueDate: nextDueDate,
-        order: count,
-        recurringTaskId: recurring.id,
-        history: {
-          create: {
-            action: "Sistema",
-            details: `Gerou pendência no Kanban para o mês ${month + 1}/${year}`,
-            user: CURRENT_USER
-          }
+  await prisma.card.create({
+    data: {
+      title: cardTitle,
+      columnId: firstCol.id,
+      moduleId: recurring.moduleId,
+      priority: "Alta",
+      description: desc,
+      dueDate: nextDueDate,
+      order: count,
+      recurringTaskId: recurring.id,
+      history: {
+        create: {
+          action: "Sistema",
+          details: `Gerou pendência no Kanban para o mês ${month + 1}/${year}`,
+          user: CURRENT_USER
         }
       }
-    });
-    revalidatePath("/");
-
+    }
+  });
+  revalidatePath("/");
 }
