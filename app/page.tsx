@@ -589,7 +589,7 @@ function CardDetailModal({ cardId, isOpen, onClose, modules, onReload }: {
   );
 }
 
-// --- VISÃO NEURAL COM HOVER INTELIGENTE & SEM TEXTOS CORTADOS ---
+// --- VISÃO NEURAL COM HOVER INTELIGENTE DINÂMICO & SEM TEXTOS CORTADOS ---
 function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete }: {
   modules: Module[];
   columns: KanbanColumn[];
@@ -642,6 +642,33 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
       };
     });
   }, [modules, moduleCardsMap]);
+
+  // CÁLCULO DINÂMICO DA POSIÇÃO DO HUD FLUTUANTE EM RELAÇÃO AO NÓ ESPECÍFICO HOVERADO
+  const hudPosition = useMemo(() => {
+    if (!hoveredNode) return null;
+    const { x, y } = hoveredNode;
+
+    // Regra horizontal: se o nó está no hemisfério esquerdo (x <= 360), o popup abre à direita do nó.
+    // Se o nó está no hemisfério direito (x > 360), o popup abre à esquerda do nó.
+    const isLeft = x <= 360;
+    const posX = isLeft ? x + 72 : x - 72;
+    const transformX = isLeft ? "0%" : "-100%";
+
+    // Regra vertical: compensa nós na parte inferior (como Faculdade em y ≈ 590)
+    // para subir ligeiramente e ficar exatamente alinhado ao lado do nó sem cortar na tela
+    let transformY = "-50%";
+    if (y < 240) {
+      transformY = "-15%"; // nós no topo (ex: Trabalho)
+    } else if (y > 480) {
+      transformY = "-82%"; // nós no rodapé (ex: Faculdade)
+    }
+
+    return {
+      left: posX,
+      top: y,
+      transform: `translate(${transformX}, ${transformY})`
+    };
+  }, [hoveredNode]);
 
   const urgentCards = useMemo(() => {
     if (!selectedModuleModal) return [];
@@ -757,70 +784,108 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
             </div>
           );
         })}
-      </div>
 
-      {/* POPUP HOLOGRÁFICO FLUTUANTE QUE APARECE NO HOVER DO MOUSE */}
-      {hoveredNode && !selectedModuleModal && (
-        <div 
-          style={{
-            position: "absolute",
-            zIndex: 60,
-            left: hoveredNode.x > 360 ? "calc(50% + 140px)" : "calc(50% - 440px)",
-            top: "calc(50% - 150px)",
-            borderColor: `${hoveredNode.color}90`,
-          }}
-          className="w-72 bg-[#0c1220]/95 border-2 rounded-2xl p-4 shadow-[0_0_40px_rgba(0,0,0,0.9)] backdrop-blur-md pointer-events-none transition-all duration-200 animate-in fade-in zoom-in-95"
-        >
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: hoveredNode.color }} />
-              <h4 className="font-bold font-mono text-white text-xs uppercase">{hoveredNode.title}</h4>
-            </div>
-            <span className="text-[10px] font-mono text-cyan-400 font-bold">{hoveredNode.percent}% feito</span>
-          </div>
-
-          <div className="space-y-2 mb-3">
-            <div className="text-[10px] uppercase font-mono text-slate-500 font-bold">
-              Pendências ({hoveredNode.cards.length}):
-            </div>
-
-            {hoveredNode.cards.slice(0, 4).map(c => {
-              const overdue = isCardOverdue(c.dueDate, c.completed);
-              return (
-                <div key={c.id} className="p-2 rounded-lg bg-[#070b14] border border-slate-800/80 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className={`font-semibold truncate max-w-40 ${c.completed ? "line-through text-slate-500" : "text-slate-200"}`}>
-                      {c.title}
-                    </span>
-                    <span className={`text-[8px] font-mono px-1 py-0.2 rounded uppercase ${
-                      c.completed ? "bg-emerald-950 text-emerald-400" :
-                      overdue ? "bg-red-950 text-red-400 font-bold" : "bg-slate-800 text-slate-400"
-                    }`}>
-                      {c.completed ? "Pago" : overdue ? "Vencida" : c.priority}
-                    </span>
-                  </div>
-                  {c.dueDate && (
-                    <div className={`text-[9px] font-mono mt-1 ${overdue ? "text-red-400" : "text-slate-500"}`}>
-                      Prazo: {new Date(c.dueDate).toLocaleDateString('pt-BR')}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {hoveredNode.cards.length === 0 && (
-              <div className="text-center py-4 text-slate-600 text-xs font-mono">
-                Nenhuma pendência ativa.
+        {/* POPUP HOLOGRÁFICO FLUTUANTE QUE ACOMPANHA A POSIÇÃO REAL DO NÓ */}
+        {hoveredNode && !selectedModuleModal && hudPosition && (
+          <div 
+            style={{
+              position: "absolute",
+              zIndex: 60,
+              left: `${hudPosition.left}px`,
+              top: `${hudPosition.top}px`,
+              transform: hudPosition.transform,
+              borderColor: `${hoveredNode.color}90`,
+              boxShadow: `0 0 35px ${hoveredNode.color}25, 0 20px 40px rgba(0,0,0,0.85)`
+            }}
+            className="w-80 bg-[#0c1220]/95 border-2 rounded-2xl p-4 backdrop-blur-md pointer-events-none transition-all duration-200 animate-in fade-in zoom-in-95"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800/90 pb-2.5 mb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full shadow-md" style={{ backgroundColor: hoveredNode.color }} />
+                <h4 className="font-bold font-mono text-white text-xs uppercase tracking-wide">
+                  {hoveredNode.title}
+                </h4>
               </div>
-            )}
-          </div>
+              <span className="text-[10px] font-mono text-cyan-400 font-bold bg-cyan-950/60 border border-cyan-800/80 px-2 py-0.5 rounded">
+                {hoveredNode.percent}% feito
+              </span>
+            </div>
 
-          <div className="border-t border-slate-800/80 pt-2 flex items-center justify-between text-[10px] font-mono text-slate-400">
-            <span>Clique para abrir a central</span>
-            <Eye size={12} className="text-blue-400" />
+            <div className="w-full bg-[#080d1a] h-1.5 rounded-full overflow-hidden mb-3 border border-slate-800/60">
+              <div 
+                className="h-full rounded-full transition-all duration-300"
+                style={{ width: `${hoveredNode.percent}%`, backgroundColor: hoveredNode.color }}
+              />
+            </div>
+
+            <div className="space-y-2 mb-3">
+              <div className="flex items-center justify-between text-[10px] uppercase font-mono font-bold text-slate-400">
+                <span>Pendências ({hoveredNode.cards.length}):</span>
+                {hoveredNode.cards.some(c => isCardOverdue(c.dueDate, c.completed)) && (
+                  <span className="text-red-400 flex items-center gap-1 font-mono text-[9px] bg-red-950/40 px-1.5 py-0.5 rounded border border-red-500/30 animate-pulse">
+                    <AlertTriangle size={10} /> Vencida Detectada
+                  </span>
+                )}
+              </div>
+
+              {hoveredNode.cards.slice(0, 4).map(c => {
+                const overdue = isCardOverdue(c.dueDate, c.completed);
+                return (
+                  <div 
+                    key={c.id} 
+                    className={`p-2.5 rounded-lg border text-xs transition-colors ${
+                      c.completed 
+                        ? "bg-[#070b14]/60 border-slate-800/50 opacity-60" 
+                        : overdue 
+                          ? "bg-[#160b10] border-red-500/60" 
+                          : "bg-[#070b14] border-slate-800/90"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      {/* TÍTULO COMPLETO SEM RETICÊNCIAS PREMATURAS */}
+                      <span className={`font-semibold text-xs leading-snug line-clamp-2 flex-1 ${
+                        c.completed ? "line-through text-slate-500" : overdue ? "text-red-200" : "text-slate-200"
+                      }`}>
+                        {c.title}
+                      </span>
+
+                      <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+                        c.completed ? "bg-emerald-950 text-emerald-400 border border-emerald-800/60" :
+                        overdue ? "bg-red-950 text-red-400 font-bold border border-red-500/50 animate-pulse" : 
+                        c.priority === 'Urgente' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                        c.priority === 'Alta' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                        'bg-slate-800 text-slate-400'
+                      }`}>
+                        {c.completed ? "✓ Concluído" : overdue ? "⚠️ Vencida" : c.priority}
+                      </span>
+                    </div>
+
+                    {c.dueDate && (
+                      <div className={`text-[9px] font-mono mt-1.5 flex items-center gap-1.5 ${
+                        overdue ? "text-red-400 font-bold" : "text-slate-500"
+                      }`}>
+                        <Calendar size={11} className={overdue ? "text-red-400" : "text-blue-400"} />
+                        <span>{overdue ? `Venceu em ${new Date(c.dueDate).toLocaleDateString('pt-BR')}` : `Prazo: ${new Date(c.dueDate).toLocaleDateString('pt-BR')}`}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {hoveredNode.cards.length === 0 && (
+                <div className="text-center py-4 text-slate-500 text-xs font-mono">
+                  Nenhuma pendência cadastrada neste módulo.
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-800/80 pt-2 flex items-center justify-between text-[10px] font-mono text-slate-400">
+              <span>Clique no nó para abrir a central</span>
+              <Eye size={12} className="text-cyan-400" />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* MODAL COMPLETO (ABERTO COM UM CLIQUE PARA VER TODAS AS ABAS E INTERAGIR) */}
       {selectedModuleModal && (
