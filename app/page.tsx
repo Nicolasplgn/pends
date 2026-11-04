@@ -38,6 +38,8 @@ type CardDetails = NonNullable<Awaited<ReturnType<typeof getCardDetails>>>;
 type DashboardStats = Awaited<ReturnType<typeof getDashboardStats>>;
 type NeuralCard = KanbanCardData & { columnTitle: string };
 type NeuralNode = Module & {
+  x: number;
+  y: number;
   cards: NeuralCard[];
   total: number;
   completed: number;
@@ -129,7 +131,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-white font-sans">PENDS // HUB</h1>
-            <span className="text-[10px] text-blue-400 font-mono">SYS.VER.8.1 // SECURE_AUTH</span>
+            <span className="text-[10px] text-blue-400 font-mono">SYS.VER.8.2 // SECURE_AUTH</span>
           </div>
         </div>
 
@@ -606,14 +608,16 @@ function CardDetailModal({ cardId, isOpen, onClose, modules, onReload }: {
   );
 }
 
-// --- VISÃO NEURAL MODERNA EM BENTO GRID + MOBILE BOTTOM SHEET ---
+// --- VISÃO NEURAL HÍBRIDA (REDE ORBITAL + PAINEL MODULAR + BOTTOM SHEET) ---
 function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete }: {
   modules: Module[];
   columns: KanbanColumn[];
   onSelectModule: (modId: string) => void;
   onToggleComplete: (cardId: string) => void;
 }) {
+  const [viewMode, setViewMode] = useState<"orbit" | "grid">("orbit");
   const [selectedModule, setSelectedModule] = useState<NeuralNode | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<NeuralNode | null>(null);
   const [activeHudTab, setActiveHudTab] = useState<"urgent" | "deadlines" | "notes" | "all">("urgent");
 
   const moduleCardsMap = useMemo(() => {
@@ -633,13 +637,25 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
   const completedAllTasks = columns.reduce((acc: number, c) => acc + c.cards.filter(card => card.completed).length, 0);
   const globalCompletionRate = totalAllTasks > 0 ? Math.round((completedAllTasks / totalAllTasks) * 100) : 0;
 
-  // Derivação dos nós com contagens
+  // Nós com coordenadas polares calculadas matematicamente para o modo orbital
   const moduleNodes: NeuralNode[] = useMemo(() => {
-    return modules.map((m) => {
+    const count = modules.length;
+    const centerX = 360;
+    const centerY = 360;
+    const radius = 230;
+
+    if (count === 0) return [];
+
+    return modules.map((m, index) => {
+      const angle = (index / count) * 2 * Math.PI - Math.PI / 2;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
       const cards = moduleCardsMap[m.id] || [];
       const completed = cards.filter(c => c.completed).length;
       return {
         ...m,
+        x,
+        y,
         cards,
         total: cards.length,
         completed,
@@ -648,7 +664,26 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
     });
   }, [modules, moduleCardsMap]);
 
-  // Lista global de pendências críticas
+  // Posição adaptativa inteligente para o HUD holográfico da órbita
+  const hudPosition = useMemo(() => {
+    if (!hoveredNode) return null;
+    const { x, y } = hoveredNode;
+    const isLeft = x <= 360;
+    const posX = isLeft ? x + 72 : x - 72;
+    const transformX = isLeft ? "0%" : "-100%";
+
+    let transformY = "-50%";
+    if (y < 240) transformY = "-15%";
+    else if (y > 480) transformY = "-82%";
+
+    return {
+      left: posX,
+      top: y,
+      transform: `translate(${transformX}, ${transformY})`
+    };
+  }, [hoveredNode]);
+
+  // Pendências críticas e vencidas
   const allUrgentCards = useMemo(() => {
     const list: NeuralCard[] = [];
     columns.forEach(col => {
@@ -661,7 +696,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
     return list;
   }, [columns]);
 
-  // Lista global de pendências vencidas
   const allOverdueCards = useMemo(() => {
     const list: NeuralCard[] = [];
     columns.forEach(col => {
@@ -690,286 +724,447 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
   }, [selectedModule]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 bg-[#050811] text-slate-200">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#050811] text-slate-200">
       
-      {/* HEADER BENTO HERO */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+      {/* HEADER DE COMANDO // SELETOR DE VISÃO */}
+      <div className="p-4 sm:px-8 border-b border-slate-800/80 bg-[#0a0f1d] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
             <span className="text-[11px] font-mono font-bold tracking-widest uppercase text-cyan-400">
-              PENDS // BENTO NEURAL HUB
+              PENDS // VISÃO NEURAL INTEGRADA
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white font-sans">
-            Central de Comando e Áreas de Vida
+          <h2 className="text-lg sm:text-xl font-black tracking-tight text-white font-sans">
+            Rede Sináptica & Central de Módulos
           </h2>
-          <p className="text-xs text-slate-400 font-sans mt-0.5">
-            Arquitetura modular em Bento Grid. Toque ou clique em qualquer área para abrir o painel tátil.
-          </p>
         </div>
 
+        {/* CONTROLES DO HEADER: TOGGLE ORBITAL vs MODULAR */}
         <div className="flex items-center gap-3">
-          <div className="px-4 py-2 rounded-2xl bg-[#0b101f] border border-slate-800 flex items-center gap-3">
-            <div>
-              <div className="text-[10px] font-mono uppercase text-slate-400">Entrega Geral</div>
-              <div className="text-lg font-bold font-mono text-emerald-400">{globalCompletionRate}%</div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <TrendingUp size={18} />
-            </div>
+          <div className="flex items-center bg-[#070b14] border border-slate-800 p-1 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setViewMode("orbit")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                viewMode === "orbit"
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Globe size={14} />
+              <span className="hidden sm:inline">Constelação Orbital</span>
+              <span className="sm:hidden">Orbital</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                viewMode === "grid"
+                  ? "bg-blue-600/20 text-blue-300 border border-blue-500/40 shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Layers size={14} />
+              <span className="hidden sm:inline">Painel Modular</span>
+              <span className="sm:hidden">Módulos</span>
+            </button>
+          </div>
+
+          <div className="px-3.5 py-1.5 rounded-xl bg-[#070b14] border border-slate-800 font-mono text-xs flex items-center gap-2">
+            <span className="text-slate-400">Entrega:</span>
+            <span className="font-bold text-emerald-400">{globalCompletionRate}%</span>
           </div>
         </div>
       </div>
 
-      {/* GRID BENTO PRINCIPAL (INSPIRADO NO LAYOUT BENTOS) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+      {/* ÁREA DE EXIBIÇÃO: MODO 1 (REDE ORBITAL SINÁPTICA) */}
+      {viewMode === "orbit" && (
+        <div className="flex-1 relative flex items-center justify-center overflow-hidden select-none p-4 sm:p-6">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#0b1120_1px,transparent_1px),linear-gradient(to_bottom,#0b1120_1px,transparent_1px)] bg-size-[4rem_4rem] mask-[radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-30 pointer-events-none" />
 
-        {/* BENTO CARD 1: HERO COMMAND TILE (Largo, 2 Colunas no Desktop) */}
-        <div className="md:col-span-2 bg-[#0b101f] border border-slate-800/90 rounded-3xl p-5 sm:p-7 shadow-xl relative overflow-hidden flex flex-col justify-between group hover:border-slate-700 transition-all">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-          
-          <div className="relative z-10 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-[10px] font-mono uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-950/60 text-blue-300 border border-blue-800/80">
-                NÚCLEO DO SISTEMA
-              </span>
-              <span className="text-xs font-mono text-slate-400">
-                {modules.length} Módulos Ativos
-              </span>
-            </div>
-
-            <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight mb-2">
-              Você tem {totalAllTasks} pendências mapeadas.
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-lg font-sans">
-              {allOverdueCards.length > 0 
-                ? `Atenção: ${allOverdueCards.length} tarefas estão com prazo vencido e exigem resolução.`
-                : "Todas as suas tarefas estão dentro do cronograma previsto."}
+          {/* DICA DE NAVEGAÇÃO */}
+          <div className="absolute top-4 left-6 z-20 hidden sm:block">
+            <p className="text-[11px] text-slate-500 font-mono">
+              💡 Passe o mouse em qualquer nó para abrir o HUD ou toque para abrir a gaveta completa.
             </p>
           </div>
 
-          <div className="relative z-10 grid grid-cols-3 gap-2 sm:gap-4 pt-4 border-t border-slate-800/80">
-            <div className="bg-[#070b14]/70 p-3 rounded-2xl border border-slate-800/60">
-              <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Concluídas</span>
-              <span className="text-xl sm:text-2xl font-bold font-mono text-emerald-400">{completedAllTasks}</span>
-            </div>
-            <div className="bg-[#070b14]/70 p-3 rounded-2xl border border-slate-800/60">
-              <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">A Fazer</span>
-              <span className="text-xl sm:text-2xl font-bold font-mono text-white">{totalAllTasks - completedAllTasks}</span>
-            </div>
-            <div className="bg-[#070b14]/70 p-3 rounded-2xl border border-slate-800/60">
-              <span className="text-[10px] font-mono uppercase text-red-400 block mb-1">Atrasadas</span>
-              <span className={`text-xl sm:text-2xl font-bold font-mono ${allOverdueCards.length > 0 ? "text-red-400 animate-pulse" : "text-slate-500"}`}>
-                {allOverdueCards.length}
-              </span>
-            </div>
-          </div>
-        </div>
+          <div className="relative w-180 h-180 flex items-center justify-center shrink-0 scale-75 sm:scale-100">
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+              <circle cx="360" cy="360" r="230" fill="none" stroke="#1e293b" strokeWidth="1" strokeDasharray="4 8" className="opacity-60" />
+              <circle cx="360" cy="360" r="140" fill="none" stroke="#1e293b" strokeWidth="1" strokeDasharray="2 6" className="opacity-40" />
+              
+              {moduleNodes.map(n => {
+                const isHovered = hoveredNode?.id === n.id;
+                return (
+                  <g key={n.id}>
+                    <line 
+                      x1="360" 
+                      y1="360" 
+                      x2={n.x} 
+                      y2={n.y} 
+                      stroke={n.color} 
+                      strokeWidth={isHovered ? "3" : "1.5"} 
+                      strokeOpacity={isHovered ? "0.9" : "0.35"} 
+                      strokeDasharray={isHovered ? "0" : "6 4"}
+                      className="transition-all duration-300" 
+                    />
+                    <circle cx={n.x} cy={n.y} r="28" fill={n.color} fillOpacity={isHovered ? "0.2" : "0.08"} />
+                  </g>
+                );
+              })}
+            </svg>
 
-        {/* BENTO CARD 2: RADAR DE PRIORIDADES / URGÊNCIAS */}
-        <div className="bg-[#0b101f] border border-slate-800/90 rounded-3xl p-5 shadow-xl flex flex-col justify-between group hover:border-slate-700 transition-all">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                  <Flame size={16} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white uppercase font-mono">Radar Crítico</h4>
-                  <span className="text-[10px] text-slate-400 font-mono">Alta prioridade</span>
-                </div>
+            {/* NÚCLEO CENTRAL */}
+            <div className="absolute z-10 flex flex-col items-center justify-center w-44 h-44 rounded-full bg-[#0a0f1d] border-2 border-blue-500/40 shadow-[0_0_50px_rgba(37,99,235,0.25)] backdrop-blur-md cursor-default">
+              <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/50 flex items-center justify-center text-blue-400 mb-2">
+                <Cpu size={26} className="animate-pulse" />
               </div>
-              <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded-full">
-                {allUrgentCards.length}
-              </span>
+              <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest">NÚCLEO CENTRAL</span>
+              <span className="text-3xl font-mono font-black text-white">{totalAllTasks}</span>
+              <span className="text-[9px] font-mono text-cyan-400 uppercase tracking-wider mt-0.5">Pendências</span>
             </div>
 
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-              {allUrgentCards.slice(0, 3).map(card => (
-                <div key={card.id} className="p-2.5 rounded-xl bg-[#070b14] border border-slate-800 flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate font-medium text-slate-200">{card.title}</span>
-                  <button 
-                    type="button" 
-                    onClick={() => onToggleComplete(card.id)}
-                    className="p-1 hover:text-emerald-400 text-slate-500 cursor-pointer shrink-0"
-                    title="Concluir"
-                  >
-                    <Circle size={15} />
-                  </button>
-                </div>
-              ))}
+            {/* NÓS DOS MÓDULOS */}
+            {moduleNodes.map(node => {
+              const isHovered = hoveredNode?.id === node.id;
+              return (
+                <div 
+                  key={node.id}
+                  onMouseEnter={() => setHoveredNode(node)}
+                  onMouseLeave={() => setHoveredNode(null)}
+                  onClick={() => {
+                    setSelectedModule(node);
+                    setActiveHudTab("urgent");
+                  }}
+                  style={{ 
+                    left: `${node.x}px`, 
+                    top: `${node.y}px`, 
+                    transform: 'translate(-50%, -50%)', 
+                    borderColor: isHovered ? node.color : `${node.color}60` 
+                  }}
+                  className={`absolute z-20 group cursor-pointer flex flex-col items-center justify-center w-28 h-28 rounded-3xl bg-[#0f172a] border-2 shadow-2xl transition-all duration-300 ${
+                    isHovered ? "scale-110 z-40 ring-4 ring-offset-2 ring-offset-black" : "hover:scale-105"
+                  }`}
+                >
+                  <div 
+                    className={`absolute inset-0 rounded-3xl blur-md transition-opacity ${
+                      isHovered ? "opacity-60" : "opacity-20"
+                    }`}
+                    style={{ backgroundColor: node.color }}
+                  />
 
-              {allUrgentCards.length === 0 && (
-                <div className="text-center py-8 text-slate-500 text-xs font-mono">
-                  Nenhuma prioridade urgente pendente.
-                </div>
-              )}
-            </div>
-          </div>
+                  <div className="w-3.5 h-3.5 rounded-full mb-1.5 shadow-sm" style={{ backgroundColor: node.color }} />
+                  
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider text-center font-mono leading-tight px-1.5 line-clamp-2">
+                    {node.title}
+                  </span>
 
-          <div className="pt-3 border-t border-slate-800/60 mt-4 text-[11px] font-mono text-slate-500 flex items-center justify-between">
-            <span>Radar em tempo real</span>
-            <Zap size={13} className="text-amber-400" />
-          </div>
-        </div>
+                  <span className="text-[10px] font-mono text-slate-400 mt-1">
+                    {node.total} tarefas
+                  </span>
 
-        {/* BENTO CARD 3: PRÓXIMOS PRAZOS */}
-        <div className="bg-[#0b101f] border border-slate-800/90 rounded-3xl p-5 shadow-xl flex flex-col justify-between group hover:border-slate-700 transition-all">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
-                  <Calendar size={16} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white uppercase font-mono">Prazos</h4>
-                  <span className="text-[10px] text-slate-400 font-mono">Controle de datas</span>
-                </div>
-              </div>
-              {allOverdueCards.length > 0 && (
-                <span className="text-[10px] font-mono font-bold text-red-400 bg-red-950/60 border border-red-800 px-2 py-0.5 rounded-full animate-pulse">
-                  ⚠️ {allOverdueCards.length} vencidas
-                </span>
-              )}
-            </div>
-
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-              {allOverdueCards.slice(0, 3).map(card => (
-                <div key={card.id} className="p-2.5 rounded-xl bg-[#160b10] border border-red-500/40 flex items-center justify-between gap-2 text-xs">
-                  <div className="truncate">
-                    <span className="truncate font-semibold text-red-200 block">{card.title}</span>
-                    <span className="text-[9px] font-mono text-red-400">
-                      Venceu em {card.dueDate ? new Date(card.dueDate).toLocaleDateString('pt-BR') : ""}
-                    </span>
+                  <div className="w-14 bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${node.percent}%`, backgroundColor: node.color }} />
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={() => onToggleComplete(card.id)}
-                    className="p-1 hover:text-emerald-400 text-red-400 cursor-pointer shrink-0"
-                    title="Concluir"
-                  >
-                    <Circle size={15} />
-                  </button>
                 </div>
-              ))}
+              );
+            })}
 
-              {allOverdueCards.length === 0 && (
-                <div className="text-center py-8 text-emerald-400/80 text-xs font-mono">
-                  ✓ Tudo em dia! Sem atrasos.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-slate-800/60 mt-4 text-[11px] font-mono text-slate-500 flex items-center justify-between">
-            <span>Sincronizado</span>
-            <Clock size={13} className="text-blue-400" />
-          </div>
-        </div>
-
-        {/* BENTO CARDS DOS MÓDULOS DE VIDA */}
-        {moduleNodes.map((node) => {
-          const hasOverdue = node.cards.some(c => isCardOverdue(c.dueDate, c.completed));
-          return (
-            <div 
-              key={node.id}
-              onClick={() => {
-                setSelectedModule(node);
-                setActiveHudTab("urgent");
-              }}
-              className={`bg-[#0b101f] border rounded-3xl p-5 shadow-xl flex flex-col justify-between cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl relative overflow-hidden group ${
-                hasOverdue 
-                  ? "border-red-500/60 ring-1 ring-red-500/30" 
-                  : "border-slate-800/90 hover:border-slate-600"
-              }`}
-            >
+            {/* POPUP HOLOGRÁFICO ADAPTATIVO */}
+            {hoveredNode && !selectedModule && hudPosition && (
               <div 
-                className="absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl pointer-events-none opacity-20 transition-opacity group-hover:opacity-40"
-                style={{ backgroundColor: node.color }}
-              />
-
-              <div>
-                <div className="flex items-center justify-between mb-3">
+                style={{
+                  position: "absolute",
+                  zIndex: 60,
+                  left: `${hudPosition.left}px`,
+                  top: `${hudPosition.top}px`,
+                  transform: hudPosition.transform,
+                  borderColor: `${hoveredNode.color}90`,
+                  boxShadow: `0 0 35px ${hoveredNode.color}25, 0 20px 40px rgba(0,0,0,0.85)`
+                }}
+                className="w-80 bg-[#0c1220]/95 border-2 rounded-3xl p-4 backdrop-blur-md pointer-events-none transition-all duration-200 animate-in fade-in zoom-in-95"
+              >
+                <div className="flex items-center justify-between border-b border-slate-800/90 pb-2 mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-3.5 h-3.5 rounded-full shadow-md shrink-0" style={{ backgroundColor: node.color }} />
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono line-clamp-1">
-                      {node.title}
-                    </h3>
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: hoveredNode.color }} />
+                    <h4 className="font-bold font-mono text-white text-xs uppercase">{hoveredNode.title}</h4>
                   </div>
-
-                  <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/40 border border-cyan-800/70 px-2 py-0.5 rounded-full">
-                    {node.percent}%
+                  <span className="text-[10px] font-mono text-cyan-400 font-bold bg-cyan-950/60 px-2 py-0.5 rounded-full">
+                    {hoveredNode.percent}%
                   </span>
                 </div>
 
-                {/* BARRA DE PROGRESSO BENTO */}
-                <div className="w-full bg-[#070b14] h-2 rounded-full overflow-hidden border border-slate-800/80 mb-4 p-0.5">
-                  <div 
-                    className="h-full rounded-full transition-all duration-500" 
-                    style={{ width: `${node.percent}%`, backgroundColor: node.color }} 
-                  />
-                </div>
-
-                {/* PRÉVIA DAS 3 PRINCIPAIS PENDÊNCIAS */}
-                <div className="space-y-2 mb-4">
-                  {node.cards.slice(0, 3).map(card => {
-                    const overdue = isCardOverdue(card.dueDate, card.completed);
+                <div className="space-y-2 mb-2.5">
+                  {hoveredNode.cards.slice(0, 3).map(c => {
+                    const overdue = isCardOverdue(c.dueDate, c.completed);
                     return (
-                      <div 
-                        key={card.id}
-                        className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
-                          card.completed 
-                            ? "bg-[#070b14]/50 border-slate-800/60 opacity-60" 
-                            : overdue 
-                              ? "bg-[#180d12] border-red-500/50" 
-                              : "bg-[#070b14] border-slate-800"
-                        }`}
-                      >
-                        <span className={`font-semibold line-clamp-1 flex-1 ${
-                          card.completed ? "line-through text-slate-500" : overdue ? "text-red-200" : "text-slate-200"
-                        }`}>
-                          {card.title}
-                        </span>
-
-                        <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded uppercase font-bold shrink-0 ${
-                          card.completed ? "bg-emerald-950 text-emerald-400" :
-                          overdue ? "bg-red-950 text-red-400" :
-                          card.priority === 'Urgente' ? 'bg-red-500/20 text-red-400' :
-                          'bg-slate-800 text-slate-400'
-                        }`}>
-                          {card.completed ? "Feito" : overdue ? "Vencida" : card.priority}
-                        </span>
+                      <div key={c.id} className="p-2 rounded-xl bg-[#070b14] border border-slate-800/80 text-xs">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className={`font-semibold line-clamp-1 flex-1 ${c.completed ? "line-through text-slate-500" : "text-slate-200"}`}>
+                            {c.title}
+                          </span>
+                          <span className={`text-[8px] font-mono px-1.5 py-0.2 rounded uppercase ${
+                            c.completed ? "bg-emerald-950 text-emerald-400" :
+                            overdue ? "bg-red-950 text-red-400 font-bold" : "bg-slate-800 text-slate-400"
+                          }`}>
+                            {c.completed ? "Feito" : overdue ? "Vencida" : c.priority}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
+                  {hoveredNode.cards.length === 0 && (
+                    <div className="text-center py-3 text-slate-500 text-xs font-mono">Sem pendências ativas.</div>
+                  )}
+                </div>
 
-                  {node.cards.length === 0 && (
-                    <div className="text-center py-5 text-slate-600 text-xs font-mono">
-                      Nenhuma pendência ativa.
+                <div className="border-t border-slate-800/80 pt-2 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span>Toque para abrir a central</span>
+                  <Eye size={12} className="text-cyan-400" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ÁREA DE EXIBIÇÃO: MODO 2 (PAINEL MODULAR COM RADAR CRÍTICO) */}
+      {viewMode === "grid" && (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+
+            {/* HERO KPIS */}
+            <div className="md:col-span-2 bg-[#0b101f] border border-slate-800/90 rounded-3xl p-5 sm:p-7 shadow-xl relative overflow-hidden flex flex-col justify-between group hover:border-slate-700 transition-all">
+              <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="relative z-10 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-mono uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-950/60 text-blue-300 border border-blue-800/80">
+                    NÚCLEO DO SISTEMA
+                  </span>
+                  <span className="text-xs font-mono text-slate-400">
+                    {modules.length} Módulos Ativos
+                  </span>
+                </div>
+
+                <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight mb-2">
+                  Você tem {totalAllTasks} pendências mapeadas.
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-400 max-w-lg font-sans">
+                  {allOverdueCards.length > 0 
+                    ? `Atenção: ${allOverdueCards.length} tarefas estão com prazo vencido e exigem resolução.`
+                    : "Todas as suas tarefas estão dentro do cronograma previsto."}
+                </p>
+              </div>
+
+              <div className="relative z-10 grid grid-cols-3 gap-2 sm:gap-4 pt-4 border-t border-slate-800/80">
+                <div className="bg-[#070b14]/70 p-3 rounded-2xl border border-slate-800/60">
+                  <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Concluídas</span>
+                  <span className="text-xl sm:text-2xl font-bold font-mono text-emerald-400">{completedAllTasks}</span>
+                </div>
+                <div className="bg-[#070b14]/70 p-3 rounded-2xl border border-slate-800/60">
+                  <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">A Fazer</span>
+                  <span className="text-xl sm:text-2xl font-bold font-mono text-white">{totalAllTasks - completedAllTasks}</span>
+                </div>
+                <div className="bg-[#070b14]/70 p-3 rounded-2xl border border-slate-800/60">
+                  <span className="text-[10px] font-mono uppercase text-red-400 block mb-1">Atrasadas</span>
+                  <span className={`text-xl sm:text-2xl font-bold font-mono ${allOverdueCards.length > 0 ? "text-red-400 animate-pulse" : "text-slate-500"}`}>
+                    {allOverdueCards.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* RADAR CRÍTICO */}
+            <div className="bg-[#0b101f] border border-slate-800/90 rounded-3xl p-5 shadow-xl flex flex-col justify-between group hover:border-slate-700 transition-all">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <Flame size={16} />
                     </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white uppercase font-mono">Radar Crítico</h4>
+                      <span className="text-[10px] text-slate-400 font-mono">Alta prioridade</span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded-full">
+                    {allUrgentCards.length}
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                  {allUrgentCards.slice(0, 3).map(card => (
+                    <div key={card.id} className="p-2.5 rounded-xl bg-[#070b14] border border-slate-800 flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate font-medium text-slate-200">{card.title}</span>
+                      <button 
+                        type="button" 
+                        onClick={() => onToggleComplete(card.id)}
+                        className="p-1 hover:text-emerald-400 text-slate-500 cursor-pointer shrink-0"
+                        title="Concluir"
+                      >
+                        <Circle size={15} />
+                      </button>
+                    </div>
+                  ))}
+                  {allUrgentCards.length === 0 && (
+                    <div className="text-center py-8 text-slate-500 text-xs font-mono">Nenhuma prioridade urgente.</div>
                   )}
                 </div>
               </div>
 
-              {/* RODAPÉ DO BENTO CARD */}
-              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                <span className="text-[10px] font-mono text-slate-400">
-                  {node.total} tarefas • {node.completed} prontas
-                </span>
-
-                <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-white group-hover:text-blue-400 transition-colors">
-                  <span>Abrir</span>
-                  <ArrowUpRight size={14} />
-                </div>
+              <div className="pt-3 border-t border-slate-800/60 mt-4 text-[11px] font-mono text-slate-500 flex items-center justify-between">
+                <span>Tempo Real</span>
+                <Zap size={13} className="text-amber-400" />
               </div>
             </div>
-          );
-        })}
 
-      </div>
+            {/* PRAZOS */}
+            <div className="bg-[#0b101f] border border-slate-800/90 rounded-3xl p-5 shadow-xl flex flex-col justify-between group hover:border-slate-700 transition-all">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
+                      <Calendar size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white uppercase font-mono">Prazos</h4>
+                      <span className="text-[10px] text-slate-400 font-mono">Controle de datas</span>
+                    </div>
+                  </div>
+                  {allOverdueCards.length > 0 && (
+                    <span className="text-[10px] font-mono font-bold text-red-400 bg-red-950/60 border border-red-800 px-2 py-0.5 rounded-full animate-pulse">
+                      ⚠️ {allOverdueCards.length} vencidas
+                    </span>
+                  )}
+                </div>
 
-      {/* MOBILE & DESKTOP BOTTOM SHEET (PAINEL DESLIZANTE AO TOCAR NO MÓDULO) */}
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                  {allOverdueCards.slice(0, 3).map(card => (
+                    <div key={card.id} className="p-2.5 rounded-xl bg-[#160b10] border border-red-500/40 flex items-center justify-between gap-2 text-xs">
+                      <div className="truncate">
+                        <span className="truncate font-semibold text-red-200 block">{card.title}</span>
+                        <span className="text-[9px] font-mono text-red-400">
+                          Venceu em {card.dueDate ? new Date(card.dueDate).toLocaleDateString('pt-BR') : ""}
+                        </span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => onToggleComplete(card.id)}
+                        className="p-1 hover:text-emerald-400 text-red-400 cursor-pointer shrink-0"
+                        title="Concluir"
+                      >
+                        <Circle size={15} />
+                      </button>
+                    </div>
+                  ))}
+                  {allOverdueCards.length === 0 && (
+                    <div className="text-center py-8 text-emerald-400/80 text-xs font-mono">✓ Tudo em dia! Sem atrasos.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800/60 mt-4 text-[11px] font-mono text-slate-500 flex items-center justify-between">
+                <span>Cronograma</span>
+                <Clock size={13} className="text-blue-400" />
+              </div>
+            </div>
+
+            {/* CARTÕES MODULARES */}
+            {moduleNodes.map((node) => {
+              const hasOverdue = node.cards.some(c => isCardOverdue(c.dueDate, c.completed));
+              return (
+                <div 
+                  key={node.id}
+                  onClick={() => {
+                    setSelectedModule(node);
+                    setActiveHudTab("urgent");
+                  }}
+                  className={`bg-[#0b101f] border rounded-3xl p-5 shadow-xl flex flex-col justify-between cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl relative overflow-hidden group ${
+                    hasOverdue ? "border-red-500/60 ring-1 ring-red-500/30" : "border-slate-800/90 hover:border-slate-600"
+                  }`}
+                >
+                  <div 
+                    className="absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl pointer-events-none opacity-20 transition-opacity group-hover:opacity-40"
+                    style={{ backgroundColor: node.color }}
+                  />
+
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3.5 h-3.5 rounded-full shadow-md shrink-0" style={{ backgroundColor: node.color }} />
+                        <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono line-clamp-1">
+                          {node.title}
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/40 border border-cyan-800/70 px-2 py-0.5 rounded-full">
+                        {node.percent}%
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-[#070b14] h-2 rounded-full overflow-hidden border border-slate-800/80 mb-4 p-0.5">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${node.percent}%`, backgroundColor: node.color }} 
+                      />
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                      {node.cards.slice(0, 3).map(card => {
+                        const overdue = isCardOverdue(card.dueDate, card.completed);
+                        return (
+                          <div 
+                            key={card.id}
+                            className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                              card.completed 
+                                ? "bg-[#070b14]/50 border-slate-800/60 opacity-60" 
+                                : overdue 
+                                  ? "bg-[#180d12] border-red-500/50" 
+                                  : "bg-[#070b14] border-slate-800"
+                            }`}
+                          >
+                            <span className={`font-semibold line-clamp-1 flex-1 ${
+                              card.completed ? "line-through text-slate-500" : overdue ? "text-red-200" : "text-slate-200"
+                            }`}>
+                              {card.title}
+                            </span>
+                            <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded uppercase font-bold shrink-0 ${
+                              card.completed ? "bg-emerald-950 text-emerald-400" :
+                              overdue ? "bg-red-950 text-red-400" :
+                              card.priority === 'Urgente' ? 'bg-red-500/20 text-red-400' :
+                              'bg-slate-800 text-slate-400'
+                            }`}>
+                              {card.completed ? "Feito" : overdue ? "Vencida" : card.priority}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {node.cards.length === 0 && (
+                        <div className="text-center py-5 text-slate-600 text-xs font-mono">Nenhuma pendência ativa.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {node.total} tarefas • {node.completed} prontas
+                    </span>
+                    <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-white group-hover:text-blue-400 transition-colors">
+                      <span>Abrir</span>
+                      <ArrowUpRight size={14} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM SHEET TÁTIL (COMPARTILHADO POR AMBOS OS MODOS) */}
       {selectedModule && (
         <div 
           className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
@@ -980,7 +1175,7 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
             style={{ borderTopColor: selectedModule.color }}
             onClick={e => e.stopPropagation()}
           >
-            {/* GRABBER BAR TÁTIL PARA SMARTPHONE */}
+            {/* GRABBER BAR PARA SMARTPHONE */}
             <div className="pt-3 pb-1 flex justify-center sm:hidden">
               <div className="w-12 h-1.5 bg-slate-700 rounded-full" />
             </div>
@@ -1011,7 +1206,7 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               </button>
             </div>
 
-            {/* ABAS TÁTEIS ROLÁVEIS NO MOBILE */}
+            {/* ABAS ROLÁVEIS */}
             <div className="bg-[#070a12] px-4 sm:px-6 py-2.5 border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto shrink-0">
               <button 
                 type="button"
@@ -1058,7 +1253,7 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               </button>
             </div>
 
-            {/* LISTA DE PENDÊNCIAS COM CHECKBOX DIRETO */}
+            {/* LISTA DE PENDÊNCIAS COM CHECKBOX */}
             <div className="p-4 sm:p-6 overflow-y-auto space-y-3 flex-1">
               {(() => {
                 let displayCards: NeuralCard[] = [];
@@ -1224,7 +1419,7 @@ export default function PendsApp() {
     setRecurringTasks(recur);
   }, []);
 
-  // Checa automaticamente se já existe sessão ativa ao carregar (evita deslogar no F5)
+  // Checa automaticamente se já existe sessão ativa ao carregar
   useEffect(() => {
     checkAuthSession().then(isAuth => {
       if (isAuth) setIsAuthenticated(true);
@@ -1518,7 +1713,7 @@ export default function PendsApp() {
             <div className="w-8 h-8 bg-blue-600 rounded-2xl flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20">P</div>
             <div>
               <span className="font-bold text-base tracking-wide text-white">PENDS</span>
-              <span className="text-[10px] text-blue-400 block font-mono">SYS.VER.8.1 // LIVE</span>
+              <span className="text-[10px] text-blue-400 block font-mono">SYS.VER.8.2 // LIVE</span>
             </div>
           </div>
           <button 
@@ -1596,7 +1791,7 @@ export default function PendsApp() {
           <div className="w-8" />
         </div>
 
-        {/* ABA 1: VISÃO NEURAL (BENTO HUB MODERNO) */}
+        {/* ABA 1: VISÃO NEURAL HÍBRIDA */}
         {activeTab === "neural" && (
           <NeuralNetworkView 
             modules={modules} 
