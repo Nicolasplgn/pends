@@ -453,7 +453,12 @@ export async function quickUpdateRecurringAmount(id: string, amount: number | nu
   revalidatePath("/");
 }
 
+// Substitua sua função deleteRecurringTask atual por esta:
 export async function deleteRecurringTask(id: string) {
+  // Opção A: Se quiser deletar os cartões gerados por essa rotina:
+  await prisma.card.deleteMany({ where: { recurringTaskId: id } });
+  
+  // Exclui a rotina
   await prisma.recurringTask.delete({ where: { id } });
   revalidatePath("/");
 }

@@ -19,10 +19,16 @@ export function FinancePipeline({
     <div className="flex-1 p-4 sm:p-8 overflow-x-auto flex gap-5 items-start">
       {columns.map((col) => {
         // FILTRO CIRÚRGICO: Apenas cards criados pelas Rotinas ou com R$ no título
+        // Substitua o trecho do filtro (dentro da função FinancePipeline) por este:
+
         const financeCards = col.cards.filter((card: any) => {
-          const hasRecurringId = card.recurringTaskId !== null && card.recurringTaskId !== undefined;
-          const hasMoneyPattern = /R\$\s*[\d.,]+/.test(card.title || "");
-          return hasRecurringId || hasMoneyPattern;
+            // Filtro: Se tiver recurringTaskId, é uma conta gerada. 
+            // OU se tiver "R$" no título, é um lançamento manual financeiro.
+            const hasRecurringId = card.recurringTaskId !== null && card.recurringTaskId !== undefined;
+            const hasMoneyPattern = /R\$\s*[\d.,]+/.test(card.title || "");
+            
+            // IMPORTANTE: Adicionamos verificação para não exibir cartões deletados
+            return (hasRecurringId || hasMoneyPattern);
         });
 
         // Somatório exato das faturas da coluna

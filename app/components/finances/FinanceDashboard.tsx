@@ -24,7 +24,11 @@ export function FinanceDashboard({
 
   const categoryData = useMemo(() => {
     const map: Record<string, { name: string; amount: number; color: string }> = {};
+    // Filtra para garantir que só computamos tarefas que ainda existem
     recurringTasks.forEach((task) => {
+      // Adicione esta checagem de segurança
+      if (!task) return; 
+      
       const modName = task.module?.title || "Geral / Pessoal";
       const color = task.module?.color || "#F59E0B";
       if (!map[modName]) {
