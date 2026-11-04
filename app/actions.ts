@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "../lib/prisma";
+import { cookies } from "next/headers";
 
 const CURRENT_USER = "Nicolas";
 
-// Função para cravar a data ao meio-dia (elimina o bug do dia anterior no Brasil UTC-3)
+// Função para cravar a data ao meio-dia (elimina o bug do fuso horário UTC-3 no Brasil)
 function parseLocalDateToMidday(dateStr?: string | null): Date | null {
   if (!dateStr || !dateStr.trim()) return null;
   if (dateStr.includes("-")) {
@@ -17,7 +18,52 @@ function parseLocalDateToMidday(dateStr?: string | null): Date | null {
   return d;
 }
 
-// 1. Módulos
+// ==========================================
+// 0. AUTENTICAÇÃO SEGURA (SERVER-SIDE)
+// ==========================================
+
+export async function loginAction(email: string, pass: string) {
+  const validEmail = process.env.AUTH_EMAIL;
+  const validPass = process.env.AUTH_PASSWORD;
+
+  if (!validEmail || !validPass) {
+    return { 
+      success: false, 
+      error: "Variáveis de ambiente AUTH_EMAIL ou AUTH_PASSWORD não foram configuradas no servidor." 
+    };
+  }
+
+  if (email.trim().toLowerCase() === validEmail.trim().toLowerCase() && pass === validPass) {
+    const cookieStore = await cookies();
+    cookieStore.set("pends_session", "authenticated", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30, // 30 dias de sessão ativa
+    });
+    return { success: true };
+  }
+
+  return { success: false, error: "Credenciais inválidas. Verifique usuário e senha." };
+}
+
+export async function checkAuthSession(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("pends_session");
+  return session?.value === "authenticated";
+}
+
+export async function logoutAction() {
+  const cookieStore = await cookies();
+  cookieStore.delete("pends_session");
+  revalidatePath("/");
+}
+
+// ==========================================
+// 1. MÓDULOS DE VIDA
+// ==========================================
+
 export async function getModules() {
   let modules = await prisma.module.findMany({ orderBy: { createdAt: "asc" } });
 
@@ -64,7 +110,10 @@ export async function deleteModule(id: string) {
   revalidatePath("/");
 }
 
-// 2. Colunas
+// ==========================================
+// 2. COLUNAS DO KANBAN
+// ==========================================
+
 export async function createColumn(title: string, isDone = false) {
   const board = await prisma.board.findFirst();
   if (!board) return;
@@ -92,7 +141,10 @@ export async function deleteColumn(id: string) {
   revalidatePath("/");
 }
 
-// 3. Quadro Kanban
+// ==========================================
+// 3. QUADRO KANBAN
+// ==========================================
+
 const boardInclude = {
   columns: {
     include: { 
@@ -129,12 +181,15 @@ export async function getBoardData() {
 
     return board;
   } catch (error) {
-    console.error("Erro banco:", error);
+    console.error("Erro no banco:", error);
     return null;
   }
 }
 
-// 4. Métricas
+// ==========================================
+// 4. ANALYTICS & MÉTRICAS
+// ==========================================
+
 export async function getDashboardStats() {
   const cards = await prisma.card.findMany({
     include: { module: true, column: true }
@@ -182,7 +237,10 @@ export async function getDashboardStats() {
   return { total, completed, inProgress, todo, urgent, overdue, completionRate, moduleMetrics, upcomingDeadlines };
 }
 
-// 5. Cards com Data Corrigida ao Meio-dia
+// ==========================================
+// 5. CARDS / PENDÊNCIAS
+// ==========================================
+
 export async function createCard(
   columnId: string, 
   title: string, 
@@ -332,7 +390,10 @@ export async function addComment(cardId: string, text: string) {
   revalidatePath("/");
 }
 
-// 6. Rotinas & Finanças
+// ==========================================
+// 6. ROTINAS & FINANÇAS
+// ==========================================
+
 export async function getRecurringTasks() {
   return await prisma.recurringTask.findMany({
     include: { 
