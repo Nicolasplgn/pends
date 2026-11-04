@@ -18,7 +18,8 @@ import {
   ChevronRight, ChevronLeft, CheckCircle2, Circle, CheckCheck,
   Wallet, Receipt, ArrowDownToLine, Zap, AlertCircle, Filter,
   Flame, FileText, History, Menu, BarChart3, PieChart, Check, Eye,
-  Sparkles, CheckSquare, ArrowUpRight
+  Sparkles, CheckSquare, ArrowUpRight, Download, Printer, Copy,
+  FileSpreadsheet, ShieldAlert, Award
 } from "lucide-react";
 import { 
   getBoardData, createCard, moveCard, deleteCard,
@@ -637,7 +638,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
   const completedAllTasks = columns.reduce((acc: number, c) => acc + c.cards.filter(card => card.completed).length, 0);
   const globalCompletionRate = totalAllTasks > 0 ? Math.round((completedAllTasks / totalAllTasks) * 100) : 0;
 
-  // Nós com coordenadas polares calculadas matematicamente para o modo orbital
   const moduleNodes: NeuralNode[] = useMemo(() => {
     const count = modules.length;
     const centerX = 360;
@@ -664,7 +664,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
     });
   }, [modules, moduleCardsMap]);
 
-  // Posição adaptativa inteligente para o HUD holográfico da órbita
   const hudPosition = useMemo(() => {
     if (!hoveredNode) return null;
     const { x, y } = hoveredNode;
@@ -683,7 +682,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
     };
   }, [hoveredNode]);
 
-  // Pendências críticas e vencidas
   const allUrgentCards = useMemo(() => {
     const list: NeuralCard[] = [];
     columns.forEach(col => {
@@ -740,7 +738,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
           </h2>
         </div>
 
-        {/* CONTROLES DO HEADER: TOGGLE ORBITAL vs MODULAR */}
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-[#070b14] border border-slate-800 p-1 rounded-2xl">
             <button
@@ -783,7 +780,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
         <div className="flex-1 relative flex items-center justify-center overflow-hidden select-none p-4 sm:p-6">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#0b1120_1px,transparent_1px),linear-gradient(to_bottom,#0b1120_1px,transparent_1px)] bg-size-[4rem_4rem] mask-[radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-30 pointer-events-none" />
 
-          {/* DICA DE NAVEGAÇÃO */}
           <div className="absolute top-4 left-6 z-20 hidden sm:block">
             <p className="text-[11px] text-slate-500 font-mono">
               💡 Passe o mouse em qualquer nó para abrir o HUD ou toque para abrir a gaveta completa.
@@ -816,7 +812,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               })}
             </svg>
 
-            {/* NÚCLEO CENTRAL */}
             <div className="absolute z-10 flex flex-col items-center justify-center w-44 h-44 rounded-full bg-[#0a0f1d] border-2 border-blue-500/40 shadow-[0_0_50px_rgba(37,99,235,0.25)] backdrop-blur-md cursor-default">
               <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/50 flex items-center justify-center text-blue-400 mb-2">
                 <Cpu size={26} className="animate-pulse" />
@@ -826,7 +821,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               <span className="text-[9px] font-mono text-cyan-400 uppercase tracking-wider mt-0.5">Pendências</span>
             </div>
 
-            {/* NÓS DOS MÓDULOS */}
             {moduleNodes.map(node => {
               const isHovered = hoveredNode?.id === node.id;
               return (
@@ -872,7 +866,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               );
             })}
 
-            {/* POPUP HOLOGRÁFICO ADAPTATIVO */}
             {hoveredNode && !selectedModule && hudPosition && (
               <div 
                 style={{
@@ -1164,7 +1157,7 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
         </div>
       )}
 
-      {/* BOTTOM SHEET TÁTIL (COMPARTILHADO POR AMBOS OS MODOS) */}
+      {/* BOTTOM SHEET TÁTIL */}
       {selectedModule && (
         <div 
           className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
@@ -1175,12 +1168,10 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
             style={{ borderTopColor: selectedModule.color }}
             onClick={e => e.stopPropagation()}
           >
-            {/* GRABBER BAR PARA SMARTPHONE */}
             <div className="pt-3 pb-1 flex justify-center sm:hidden">
               <div className="w-12 h-1.5 bg-slate-700 rounded-full" />
             </div>
 
-            {/* HEADER DA GAVETA */}
             <div className="p-4 sm:p-6 border-b border-slate-800 flex items-center justify-between shrink-0 bg-[#070b14]/90">
               <div className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded-full shadow-lg" style={{ backgroundColor: selectedModule.color }} />
@@ -1206,7 +1197,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               </button>
             </div>
 
-            {/* ABAS ROLÁVEIS */}
             <div className="bg-[#070a12] px-4 sm:px-6 py-2.5 border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto shrink-0">
               <button 
                 type="button"
@@ -1253,7 +1243,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               </button>
             </div>
 
-            {/* LISTA DE PENDÊNCIAS COM CHECKBOX */}
             <div className="p-4 sm:p-6 overflow-y-auto space-y-3 flex-1">
               {(() => {
                 let displayCards: NeuralCard[] = [];
@@ -1321,7 +1310,6 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
               })()}
             </div>
 
-            {/* RODAPÉ DO BOTTOM SHEET */}
             <div className="p-4 sm:p-5 bg-[#070b14] border-t border-slate-800 flex justify-between items-center shrink-0">
               <button 
                 type="button"
@@ -1348,6 +1336,276 @@ function NeuralNetworkView({ modules, columns, onSelectModule, onToggleComplete 
         </div>
       )}
 
+    </div>
+  );
+}
+
+// --- MODAL DE RELATÓRIO EXECUTIVO OFICIAL (100% TIPADO SEM ERROS) ---
+function ExecutiveReportModal({
+  isOpen,
+  onClose,
+  stats,
+  modules,
+  columns,
+  recurringTasks,
+  selectedMonth,
+  selectedYear
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  stats: DashboardStats | null;
+  modules: Module[];
+  columns: KanbanColumn[];
+  recurringTasks: any[];
+  selectedMonth: number;
+  selectedYear: number;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  if (!isOpen || !stats) return null;
+
+  // Desestruturação segura para eliminar erro 'stats is possibly null' em closures
+  const { total: totalTasks, completed: totalCompleted, completionRate, inProgress, todo, moduleMetrics } = stats;
+
+  // Correção da busca direta na coluna 'col.isDone', pois o card individual não tem propriedade 'card.column'
+  const overdueCards = columns.flatMap(col => col.cards.filter(card => !card.completed && !col.isDone && isCardOverdue(card.dueDate)));
+  const urgentCards = columns.flatMap(col => col.cards.filter(card => !card.completed && !col.isDone && (card.priority === "Urgente" || card.priority === "Alta")));
+  const totalFinancial = recurringTasks.reduce((acc, r) => acc + (r.amount || 0), 0);
+
+  function handlePrint() {
+    window.print();
+  }
+
+  function handleCopySummary() {
+    const summary = `
+========================================
+📋 RELATÓRIO EXECUTIVO PENDS
+Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}
+Usuário: Nicolas Gonçalves
+========================================
+
+📊 TELEMETRIA DE PRODUTIVIDADE:
+- Total de Tarefas: ${totalTasks}
+- Concluídas: ${totalCompleted} (${completionRate}%)
+- Em Andamento: ${inProgress + todo}
+- Atrasadas / Vencidas: ${overdueCards.length}
+- Alta Prioridade / Urgentes: ${urgentCards.length}
+
+💰 CONTROLE FINANCEIRO (${MONTH_NAMES[selectedMonth]}/${selectedYear}):
+- Custo Mapeado Previsto: ${totalFinancial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+- Contas Cadastradas: ${recurringTasks.length}
+
+📂 CARGA POR MÓDULO DE VIDA:
+${moduleMetrics.map(m => `• ${m.title}: ${m.done}/${m.total} (${m.percent}%) - ${m.pending} pendentes`).join("\n")}
+
+⚠️ RISCOS E ATENÇÃO IMEDIATA:
+${overdueCards.length > 0 ? overdueCards.map(c => `[VENCIDA] ${c.title} (Prazo: ${c.dueDate ? new Date(c.dueDate).toLocaleDateString('pt-BR') : 'Sem prazo'})`).join("\n") : "✓ Nenhuma pendência vencida."}
+========================================
+`.trim();
+
+    navigator.clipboard.writeText(summary);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-[#0b101f] border border-blue-900/40 w-full max-w-4xl rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-200"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* HEADER DO RELATÓRIO */}
+        <div className="p-5 sm:p-6 border-b border-slate-800 bg-[#070b14] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+              <FileSpreadsheet size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase bg-blue-950 text-blue-300 border border-blue-800 px-2 py-0.5 rounded-full">
+                  DIAGNÓSTICO OFICIAL
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Emitido em {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-tight font-sans mt-0.5">
+                Relatório Executivo Pends // Telemetria & Finanças
+              </h3>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopySummary}
+              className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800/60 hover:bg-slate-800 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Copiar resumo em texto"
+            >
+              {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+              <span className="hidden sm:inline">{copied ? "Copiado!" : "Copiar"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              title="Imprimir ou Salvar em PDF"
+            >
+              <Printer size={16} />
+              <span className="hidden sm:inline">PDF / Imprimir</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* CORPO DO DOCUMENTO */}
+        <div className="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1 text-sm font-sans bg-[#050811]">
+          
+          {/* SÍNTESE EM NÚMEROS */}
+          <div>
+            <h4 className="text-xs font-bold uppercase font-mono text-cyan-400 tracking-wider mb-3 flex items-center gap-1.5">
+              <Award size={14} /> 1. Painel Geral de Desempenho
+            </h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-[#0b101f] p-4 rounded-2xl border border-slate-800">
+                <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Total de Tarefas</span>
+                <span className="text-2xl font-black font-mono text-white">{totalTasks}</span>
+              </div>
+              <div className="bg-[#0b101f] p-4 rounded-2xl border border-slate-800">
+                <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Taxa de Conclusão</span>
+                <span className="text-2xl font-black font-mono text-emerald-400">{completionRate}%</span>
+                <span className="text-[10px] text-slate-500 block font-mono mt-0.5">{totalCompleted} entregues</span>
+              </div>
+              <div className="bg-[#0b101f] p-4 rounded-2xl border border-slate-800">
+                <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Em Andamento</span>
+                <span className="text-2xl font-black font-mono text-cyan-400">{inProgress + todo}</span>
+                <span className="text-[10px] text-slate-500 block font-mono mt-0.5">{inProgress} ativas</span>
+              </div>
+              <div className="bg-[#0b101f] p-4 rounded-2xl border border-slate-800">
+                <span className="text-[10px] font-mono uppercase text-red-400 block mb-1">Atrasadas / Críticas</span>
+                <span className="text-2xl font-black font-mono text-red-400">{overdueCards.length + urgentCards.length}</span>
+                <span className="text-[10px] text-red-400/80 block font-mono mt-0.5">{overdueCards.length} vencidas</span>
+              </div>
+            </div>
+          </div>
+
+          {/* BALANÇO POR MÓDULO */}
+          <div>
+            <h4 className="text-xs font-bold uppercase font-mono text-cyan-400 tracking-wider mb-3 flex items-center gap-1.5">
+              <Layers size={14} /> 2. Distribuição por Módulo de Vida
+            </h4>
+            <div className="bg-[#0b101f] rounded-2xl border border-slate-800 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#070b14] text-[10px] font-mono uppercase text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th className="p-3.5">Módulo</th>
+                    <th className="p-3.5">Total</th>
+                    <th className="p-3.5">Concluídas</th>
+                    <th className="p-3.5">Pendentes</th>
+                    <th className="p-3.5 text-right">Progresso</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-mono">
+                  {moduleMetrics.map((m) => (
+                    <tr key={m.id} className="hover:bg-slate-900/40">
+                      <td className="p-3.5 flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />
+                        <span className="font-bold text-white font-sans">{m.title}</span>
+                      </td>
+                      <td className="p-3.5 text-slate-300">{m.total}</td>
+                      <td className="p-3.5 text-emerald-400 font-bold">{m.done}</td>
+                      <td className="p-3.5 text-amber-400">{m.pending}</td>
+                      <td className="p-3.5 text-right font-bold text-cyan-400">{m.percent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* BALANÇO FINANCEIRO */}
+          <div>
+            <h4 className="text-xs font-bold uppercase font-mono text-cyan-400 tracking-wider mb-3 flex items-center gap-1.5">
+              <Wallet size={14} /> 3. Projeção Financeira Integrada ({MONTH_NAMES[selectedMonth]}/{selectedYear})
+            </h4>
+            <div className="bg-[#0b101f] p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-[11px] font-mono text-slate-400 block mb-1">Custo Total Previsto no Período</span>
+                <span className="text-3xl font-black font-mono text-emerald-400">
+                  {totalFinancial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+                <span className="text-[10px] font-mono text-slate-500 block mt-1">
+                  Mapeamento baseado em {recurringTasks.length} contas e rotinas configuradas
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {recurringTasks.slice(0, 4).map(r => (
+                  <div key={r.id} className="p-2.5 rounded-xl bg-[#070b14] border border-slate-800 text-xs font-mono">
+                    <span className="text-slate-400 block text-[10px] truncate max-w-32">{r.title}</span>
+                    <span className="text-emerald-400 font-bold">
+                      {r.amount ? r.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : "R$ 0,00"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* MATRIZ DE RISCO / VENCIDAS */}
+          <div>
+            <h4 className="text-xs font-bold uppercase font-mono text-red-400 tracking-wider mb-3 flex items-center gap-1.5">
+              <ShieldAlert size={14} /> 4. Matriz de Atenção (Vencidas e Críticas)
+            </h4>
+            <div className="space-y-2">
+              {overdueCards.map(c => (
+                <div key={c.id} className="p-3 rounded-xl bg-[#160b10] border border-red-500/40 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-red-200 block">{c.title}</span>
+                    <span className="text-[10px] font-mono text-red-400">
+                      Módulo: {c.module?.title || "Geral"} • Venceu em: {c.dueDate ? new Date(c.dueDate).toLocaleDateString('pt-BR') : ""}
+                    </span>
+                  </div>
+                  <span className="text-[9px] font-mono font-bold uppercase bg-red-950 text-red-400 border border-red-800 px-2 py-0.5 rounded">
+                    ⚠️ Vencida
+                  </span>
+                </div>
+              ))}
+
+              {overdueCards.length === 0 && (
+                <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-800/40 text-emerald-400 text-xs font-mono flex items-center gap-2">
+                  <Check size={16} /> Nenhuma pendência em atraso no sistema. Excelente gestão de cronograma!
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* RODAPÉ */}
+        <div className="p-4 bg-[#070b14] border-t border-slate-800 flex justify-between items-center shrink-0">
+          <span className="text-[10px] font-mono text-slate-500">
+            Pends ERP // Relatório gerado com isolamento de schema PostgreSQL
+          </span>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-xs font-bold rounded-xl cursor-pointer"
+          >
+            Fechar Janela
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1381,6 +1639,9 @@ export default function PendsApp() {
   const [editingRecurring, setEditingRecurring] = useState<any>(null);
 
   const [inspectingTaskId, setInspectingTaskId] = useState<string | null>(null);
+
+  // ESTADO DO RELATÓRIO EXECUTIVO
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const inspectingTask = useMemo(() => {
     if (!inspectingTaskId) return null;
@@ -1419,7 +1680,6 @@ export default function PendsApp() {
     setRecurringTasks(recur);
   }, []);
 
-  // Checa automaticamente se já existe sessão ativa ao carregar
   useEffect(() => {
     checkAuthSession().then(isAuth => {
       if (isAuth) setIsAuthenticated(true);
@@ -1435,6 +1695,37 @@ export default function PendsApp() {
   async function handleLogout() {
     await logoutAction();
     setIsAuthenticated(false);
+  }
+
+  // EXPORTADOR CSV
+  function handleExportCSV() {
+    const rows: string[][] = [
+      ["ID", "Título", "Módulo", "Prioridade", "Vencimento", "Status", "Descrição"]
+    ];
+
+    columns.forEach(col => {
+      col.cards.forEach(card => {
+        const isDone = card.completed || col.isDone;
+        rows.push([
+          card.id,
+          `"${(card.title || "").replace(/"/g, '""')}"`,
+          card.module?.title || "Geral",
+          card.priority,
+          card.dueDate ? new Date(card.dueDate).toLocaleDateString('pt-BR') : "Sem prazo",
+          isDone ? "Concluída" : col.title,
+          `"${(card.description || "").replace(/"/g, '""')}"`
+        ]);
+      });
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.map(e => e.join(";")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Relatorio_Pends_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   function handlePrevMonth() {
@@ -1696,12 +1987,25 @@ export default function PendsApp() {
         />
       )}
 
+      {/* MODAL DETALHES CARD */}
       <CardDetailModal 
         cardId={selectedCardId} 
         isOpen={!!selectedCardId} 
         onClose={() => setSelectedCardId(null)} 
         modules={modules}
         onReload={loadAll}
+      />
+
+      {/* MODAL DE RELATÓRIO EXECUTIVO OFICIAL */}
+      <ExecutiveReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        stats={stats}
+        modules={modules}
+        columns={columns}
+        recurringTasks={recurringTasks}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
       />
 
       {/* SIDEBAR RESPONSIVA */}
@@ -1801,51 +2105,121 @@ export default function PendsApp() {
           />
         )}
         
-        {/* ABA 2: ANALYTICS DASH */}
+        {/* ABA 2: ANALYTICS DASH NOVO PADRÃO DE DESIGN COM GERADOR DE RELATÓRIO */}
         {activeTab === "dashboard" && !stats && (
           <div className="flex-1 flex items-center justify-center text-slate-500 font-mono text-sm">
-            Carregando analytics...
+            Carregando telemetria analítica...
           </div>
         )}
         {activeTab === "dashboard" && stats && (
           <div className="flex-1 p-4 sm:p-8 overflow-y-auto space-y-6">
+            
+            {/* CABEÇALHO DO ANALYTICS COM BOTÕES DE RELATÓRIO */}
+            <div className="bg-[#0b101f] border border-slate-800/90 rounded-3xl p-5 sm:p-7 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-blue-400 font-bold">
+                    PENDS // ANALYTICS INTELLIGENCE
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  Painel de Desempenho & Diagnóstico
+                </h2>
+                <p className="text-xs text-slate-400 font-sans mt-0.5">
+                  Métricas de produtividade, auditoria de gargalos e geração de relatórios executivos.
+                </p>
+              </div>
+
+              {/* BOTÕES DE AÇÃO: RELATÓRIO E EXPORTAÇÃO */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="px-4 py-2.5 bg-[#070b14] hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                  title="Baixar todas as pendências em arquivo .CSV para Excel"
+                >
+                  <Download size={14} className="text-emerald-400" />
+                  <span>Exportar CSV</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowReportModal(true)}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-blue-600/20 cursor-pointer"
+                >
+                  <FileText size={15} />
+                  <span>Gerar Relatório Executivo</span>
+                </button>
+              </div>
+            </div>
+
+            {/* TOP 4 KPIS NOVO PADRÃO VISUAL */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-slate-800">
-                <div className="flex justify-between items-start mb-2"><span className="text-[11px] font-mono uppercase text-slate-400">Total Geral</span><Layers size={16} className="text-blue-400"/></div>
+              <div className="bg-[#0b101f] p-5 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Total de Pendências</span>
+                  <div className="w-8 h-8 rounded-xl bg-blue-600/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <Layers size={16} />
+                  </div>
+                </div>
                 <div className="text-3xl font-mono font-black text-white">{stats.total}</div>
-                <div className="text-[11px] text-slate-500 mt-2 font-mono">Tarefas cadastradas</div>
+                <div className="text-[11px] text-slate-500 mt-2 font-mono">Mapeadas no Kanban</div>
               </div>
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-slate-800">
-                <div className="flex justify-between items-start mb-2"><span className="text-[11px] font-mono uppercase text-slate-400">Taxa de Entrega</span><TrendingUp size={16} className="text-emerald-400"/></div>
+
+              <div className="bg-[#0b101f] p-5 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Taxa de Conclusão</span>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <TrendingUp size={16} />
+                  </div>
+                </div>
                 <div className="text-3xl font-mono font-black text-emerald-400">{stats.completionRate}%</div>
-                <div className="text-[11px] text-slate-500 mt-2 font-mono">{stats.completed} de {stats.total} feitas</div>
+                <div className="text-[11px] text-slate-500 mt-2 font-mono">{stats.completed} entregues no total</div>
               </div>
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-slate-800">
-                <div className="flex justify-between items-start mb-2"><span className="text-[11px] font-mono uppercase text-slate-400">Em Andamento</span><Clock size={16} className="text-cyan-400"/></div>
+
+              <div className="bg-[#0b101f] p-5 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Em Andamento</span>
+                  <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                    <Clock size={16} />
+                  </div>
+                </div>
                 <div className="text-3xl font-mono font-black text-cyan-400">{stats.inProgress + stats.todo}</div>
-                <div className="text-[11px] text-slate-500 mt-2 font-mono">{stats.inProgress} ativas // {stats.todo} a fazer</div>
+                <div className="text-[11px] text-slate-500 mt-2 font-mono">{stats.inProgress} ativas // {stats.todo} a iniciar</div>
               </div>
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-slate-800">
-                <div className="flex justify-between items-start mb-2"><span className="text-[11px] font-mono uppercase text-red-400">Crítico / Atrasado</span><AlertTriangle size={16} className="text-red-400"/></div>
-                <div className="text-3xl font-mono font-black text-red-400">{stats.overdue + stats.urgent}</div>
+
+              <div className="bg-[#0b101f] p-5 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[11px] font-mono uppercase text-red-400">Atenção Crítica</span>
+                  <div className="w-8 h-8 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
+                    <AlertTriangle size={16} />
+                  </div>
+                </div>
+                <div className={`text-3xl font-mono font-black ${stats.overdue + stats.urgent > 0 ? "text-red-400 animate-pulse" : "text-slate-500"}`}>
+                  {stats.overdue + stats.urgent}
+                </div>
                 <div className="text-[11px] text-slate-500 mt-2 font-mono">{stats.overdue} vencidas // {stats.urgent} urgentes</div>
               </div>
             </div>
 
+            {/* SEÇÃO PRINCIPAL: CARGA POR MÓDULO & PRÓXIMOS PRAZOS */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-[#0f172a] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-xl">
+              
+              {/* CARGA POR MÓDULO */}
+              <div className="lg:col-span-2 bg-[#0b101f] p-5 sm:p-7 rounded-3xl border border-slate-800/90 shadow-xl">
                 <div className="flex items-center justify-between mb-6">
                   <div>
                     <h3 className="text-sm font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
                       <BarChart3 size={16} className="text-blue-400" />
-                      <span>Carga por Módulo de Vida</span>
+                      <span>Carga & Volume por Módulo</span>
                     </h3>
-                    <p className="text-xs text-slate-500 mt-1 font-sans">
-                      Distribuição do volume de tarefas e progresso em tempo real
+                    <p className="text-xs text-slate-500 mt-0.5 font-sans">
+                      Distribuição em tempo real do progresso das áreas de vida
                     </p>
                   </div>
-                  <span className="text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800 px-2.5 py-1 rounded">
-                    PROGRESS
+                  <span className="text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800 px-2.5 py-1 rounded-full">
+                    {stats.moduleMetrics.length} Módulos
                   </span>
                 </div>
 
@@ -1856,14 +2230,14 @@ export default function PendsApp() {
                         <div className="flex items-center gap-2">
                           <span className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: mod.color }}/>
                           <span className="font-semibold text-slate-200">{mod.title}</span>
-                          <span className="text-slate-500 text-[11px] font-mono">({mod.total} total)</span>
+                          <span className="text-slate-500 text-[11px] font-mono">({mod.total} tarefas)</span>
                         </div>
                         <div className="font-mono text-slate-400 text-xs">
                           <span className="text-emerald-400 font-bold">{mod.done}</span> / <span className="text-amber-400">{mod.pending}</span> ({mod.percent}%)
                         </div>
                       </div>
                       
-                      <div className="w-full bg-[#080d1a] h-2.5 rounded-full overflow-hidden border border-slate-800/80 p-0.5">
+                      <div className="w-full bg-[#070b14] h-2.5 rounded-full overflow-hidden border border-slate-800/80 p-0.5">
                         <div 
                           className="h-full rounded-full transition-all duration-500 shadow-sm" 
                           style={{ width: `${mod.percent}%`, backgroundColor: mod.color }} 
@@ -1880,104 +2254,138 @@ export default function PendsApp() {
                 </div>
               </div>
 
-              <div className="bg-[#0f172a] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
-                    <Calendar size={15} className="text-blue-400"/>
-                    <span>Próximos Prazos</span>
-                  </h3>
-                  <span className="text-[10px] font-mono text-slate-500">AGENDA</span>
-                </div>
+              {/* AGENDA DE PRÓXIMOS PRAZOS INTERATIVA */}
+              <div className="bg-[#0b101f] p-5 sm:p-7 rounded-3xl border border-slate-800/90 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
+                      <Calendar size={16} className="text-blue-400"/>
+                      <span>Próximos Prazos</span>
+                    </h3>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full">
+                      AGENDA
+                    </span>
+                  </div>
 
-                <div className="space-y-2.5 flex-1 overflow-y-auto max-h-80">
-                  {stats.upcomingDeadlines.map((item) => {
-                    const overdue = isCardOverdue(item.dueDate);
-                    return (
-                      <div 
-                        key={item.id} 
-                        className={`p-3 bg-[#0a0f1d] border rounded-xl flex items-center justify-between transition-colors ${
-                          overdue ? "border-red-500/40 bg-red-950/10" : "border-slate-800/80 hover:border-slate-700"
-                        }`}
-                      >
-                        <div className="truncate pr-2">
-                          <div className={`text-xs font-semibold truncate ${overdue ? "text-red-300" : "text-slate-200"}`}>
-                            {item.title}
+                  <div className="space-y-2.5 overflow-y-auto max-h-80 pr-1">
+                    {stats.upcomingDeadlines.map((item) => {
+                      const overdue = isCardOverdue(item.dueDate);
+                      return (
+                        <div 
+                          key={item.id} 
+                          className={`p-3 rounded-2xl border flex items-center justify-between transition-colors ${
+                            overdue ? "border-red-500/40 bg-red-950/10" : "bg-[#070b14] border-slate-800 hover:border-slate-700"
+                          }`}
+                        >
+                          <div className="truncate pr-2">
+                            <div className={`text-xs font-semibold truncate ${overdue ? "text-red-300" : "text-slate-200"}`}>
+                              {item.title}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: item.moduleColor }}>
+                                {item.moduleName}
+                              </span>
+                              <span className={`text-[10px] font-mono ${overdue ? "text-red-400 font-bold" : "text-slate-400"}`}>
+                                {item.dueDate ? new Date(item.dueDate).toLocaleDateString('pt-BR') : ""}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: item.moduleColor }}>
-                              {item.moduleName}
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded font-mono uppercase ${
+                              overdue ? "bg-red-500/20 text-red-400 border border-red-500/40" :
+                              item.priority === 'Urgente' ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {overdue ? "Vencida" : item.priority}
                             </span>
-                            <span className={`text-[10px] font-mono ${overdue ? "text-red-400 font-bold" : "text-slate-400"}`}>
-                              {item.dueDate ? new Date(item.dueDate).toLocaleDateString('pt-BR') : ""}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleComplete(item.id)}
+                              className="text-slate-500 hover:text-emerald-400 p-1 cursor-pointer transition-colors"
+                              title="Concluir tarefa"
+                            >
+                              <Circle size={15} />
+                            </button>
                           </div>
                         </div>
+                      );
+                    })}
 
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded font-mono uppercase shrink-0 ${
-                          overdue ? "bg-red-500/20 text-red-400 border border-red-500/40" :
-                          item.priority === 'Urgente' ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {overdue ? "Vencida" : item.priority}
-                        </span>
+                    {stats.upcomingDeadlines.length === 0 && (
+                      <div className="text-center py-12 text-slate-600 font-mono text-xs">
+                        Nenhum prazo cadastrado para os próximos dias.
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
+                </div>
 
-                  {stats.upcomingDeadlines.length === 0 && (
-                    <div className="text-center py-12 text-slate-600 font-mono text-xs">
-                      Nenhum prazo cadastrado para os próximos dias.
-                    </div>
-                  )}
+                <div className="pt-3 border-t border-slate-800/60 mt-4 text-[11px] font-mono text-slate-500 flex items-center justify-between">
+                  <span>Conclusão em 1 toque</span>
+                  <CheckSquare size={13} className="text-emerald-400" />
                 </div>
               </div>
 
             </div>
 
+            {/* SEÇÃO INFERIOR: DISTRIBUIÇÃO PIPELINE & CONTROLE FINANCEIRO */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-[#0f172a] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-xl">
+              
+              {/* DISTRIBUIÇÃO DO PIPELINE */}
+              <div className="bg-[#0b101f] p-5 sm:p-7 rounded-3xl border border-slate-800/90 shadow-xl">
                 <h3 className="text-sm font-bold text-white tracking-wide uppercase font-mono mb-4 flex items-center gap-2">
                   <PieChart size={16} className="text-cyan-400" />
-                  <span>Distribuição do Pipeline</span>
+                  <span>Distribuição no Pipeline</span>
                 </h3>
 
                 <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  <div className="p-3 bg-[#0a0f1d] border border-slate-800 rounded-xl text-center">
+                  <div className="p-3.5 bg-[#070b14] border border-slate-800 rounded-2xl text-center">
                     <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">A Fazer</span>
-                    <span className="text-xl sm:text-2xl font-bold font-mono text-slate-200">{stats.todo}</span>
+                    <span className="text-2xl font-bold font-mono text-slate-200">{stats.todo}</span>
+                    <span className="text-[10px] font-mono text-slate-500 block mt-1">
+                      {stats.total > 0 ? Math.round((stats.todo / stats.total) * 100) : 0}%
+                    </span>
                   </div>
-                  <div className="p-3 bg-[#0a0f1d] border border-slate-800 rounded-xl text-center">
+                  <div className="p-3.5 bg-[#070b14] border border-slate-800 rounded-2xl text-center">
                     <span className="text-[10px] font-mono uppercase text-cyan-400 block mb-1">Andamento</span>
-                    <span className="text-xl sm:text-2xl font-bold font-mono text-cyan-400">{stats.inProgress}</span>
+                    <span className="text-2xl font-bold font-mono text-cyan-400">{stats.inProgress}</span>
+                    <span className="text-[10px] font-mono text-slate-500 block mt-1">
+                      {stats.total > 0 ? Math.round((stats.inProgress / stats.total) * 100) : 0}%
+                    </span>
                   </div>
-                  <div className="p-3 bg-[#0a0f1d] border border-slate-800 rounded-xl text-center">
+                  <div className="p-3.5 bg-[#070b14] border border-slate-800 rounded-2xl text-center">
                     <span className="text-[10px] font-mono uppercase text-emerald-400 block mb-1">Concluídas</span>
-                    <span className="text-xl sm:text-2xl font-bold font-mono text-emerald-400">{stats.completed}</span>
+                    <span className="text-2xl font-bold font-mono text-emerald-400">{stats.completed}</span>
+                    <span className="text-[10px] font-mono text-slate-500 block mt-1">
+                      {stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}%
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-[#0f172a] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {/* CONTROLE FINANCEIRO VINCULADO */}
+              <div className="bg-[#0b101f] p-5 sm:p-7 rounded-3xl border border-slate-800/90 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-sm font-bold text-white tracking-wide uppercase font-mono mb-1 flex items-center gap-2">
                     <Wallet size={16} className="text-emerald-400" />
-                    <span>Controle Financeiro Vinculado</span>
+                    <span>Controle Financeiro Mensal</span>
                   </h3>
-                  <div className="text-2xl font-black font-mono text-emerald-400 mt-2">
+                  <div className="text-3xl font-black font-mono text-emerald-400 mt-2">
                     {totalMensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono mt-1 block">
-                    {recurringTasks.length} contas e rotinas cadastradas na planilha
+                  <span className="text-[11px] text-slate-400 font-mono mt-1 block">
+                    {recurringTasks.length} contas e rotinas ativas em {MONTH_NAMES[selectedMonth]}/{selectedYear}
                   </span>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setActiveTab("finances")}
-                  className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-xl text-xs font-bold font-mono transition-colors cursor-pointer text-center"
+                  className="w-full sm:w-auto px-5 py-3 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-2xl text-xs font-bold font-mono transition-all cursor-pointer text-center shadow-lg"
                 >
                   Abrir Planilha ➔
                 </button>
               </div>
+
             </div>
 
           </div>
@@ -2062,7 +2470,6 @@ export default function PendsApp() {
                           </td>
                           <td className="p-4 font-mono text-slate-400">{task.dueDay ? `Todo dia ${task.dueDay}` : "Variável"}</td>
                           
-                          {/* EDIÇÃO RÁPIDA INLINE */}
                           <td className="p-4 font-mono">
                             {isEditingThis ? (
                               <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
