@@ -3,7 +3,7 @@
 import type { Module } from "@prisma/client";
 import { 
   Globe, Activity, Layout, Wallet, 
-  Plus, Pencil, Trash2, LogOut, X 
+  Plus, Pencil, Trash2, LogOut, X, Search
 } from "lucide-react";
 
 interface SidebarProps {
@@ -17,6 +17,7 @@ interface SidebarProps {
   onOpenModuleModal: (mod?: Module) => void;
   onDeleteModule: (id: string) => void;
   onLogout: () => void;
+  onOpenPalette?: () => void;
 }
 
 export function Sidebar({
@@ -29,7 +30,8 @@ export function Sidebar({
   setActiveModuleFilter,
   onOpenModuleModal,
   onDeleteModule,
-  onLogout
+  onLogout,
+  onOpenPalette,
 }: SidebarProps) {
   return (
     <>
@@ -151,6 +153,19 @@ export function Sidebar({
             ))}
           </div>
         </div>
+
+        {onOpenPalette && (
+          <div className="px-4 pb-3">
+            <button
+              type="button"
+              onClick={() => { setMobileMenuOpen(false); onOpenPalette(); }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-slate-800 bg-[#070a12] text-xs text-slate-400 hover:text-white hover:border-slate-600 cursor-pointer"
+            >
+              <span className="flex items-center gap-2"><Search size={13} /> Buscar / ações</span>
+              <kbd className="text-[10px] font-mono border border-slate-700 rounded px-1.5">Ctrl K</kbd>
+            </button>
+          </div>
+        )}
 
         {/* PERFIL DO USUÁRIO & SAÍDA */}
         <div className="p-4 border-t border-slate-800/80 bg-[#070a12] flex items-center justify-between">

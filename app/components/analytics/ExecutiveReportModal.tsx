@@ -5,7 +5,7 @@ import type { Module } from "@prisma/client";
 import { 
   FileSpreadsheet, Award, Layers, Wallet, ShieldAlert, Check, Copy, Printer, X 
 } from "lucide-react";
-import type { DashboardStats, KanbanColumn } from "../../types";
+import type { DashboardStats, FinanceSnapshot, KanbanColumn } from "../../types";
 import { MONTH_NAMES, isCardOverdue } from "../../types";
 
 interface ExecutiveReportModalProps {
@@ -14,7 +14,7 @@ interface ExecutiveReportModalProps {
   stats: DashboardStats | null;
   modules: Module[];
   columns: KanbanColumn[];
-  recurringTasks: any[];
+  finance: FinanceSnapshot | null;
   selectedMonth: number;
   selectedYear: number;
 }
@@ -24,7 +24,7 @@ export function ExecutiveReportModal({
   onClose,
   stats,
   columns,
-  recurringTasks,
+  finance,
   selectedMonth,
   selectedYear,
 }: ExecutiveReportModalProps) {
@@ -41,7 +41,8 @@ export function ExecutiveReportModal({
   const urgentCards = columns.flatMap((col) =>
     col.cards.filter((card) => !card.completed && !col.isDone && (card.priority === "Urgente" || card.priority === "Alta"))
   );
-  const totalFinancial = recurringTasks.reduce((acc, r) => acc + (r.amount || 0), 0);
+  const totalFinancial = finance?.expense ?? 0;
+  const topExpenses = finance?.topExpenses ?? [];
 
   function handlePrint() {
     window.print();
@@ -63,8 +64,10 @@ Usuário: Nicolas Gonçalves
 - Alta Prioridade / Urgentes: ${urgentCards.length}
 
 💰 CONTROLE FINANCEIRO (${MONTH_NAMES[selectedMonth]}/${selectedYear}):
-- Custo Mapeado Previsto: ${totalFinancial.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-- Contas Cadastradas: ${recurringTasks.length}
+- Entradas: ${(finance?.income ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+- Saídas: ${totalFinancial.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+- Saldo: ${(finance?.balance ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+- A pagar: ${(finance?.pending ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
 
 📂 CARGA POR MÓDULO DE VIDA:
 ${moduleMetrics.map((m) => `• ${m.title}: ${m.done}/${m.total} (${m.percent}%) - ${m.pending} pendentes`).join("\n")}
@@ -212,18 +215,18 @@ ${overdueCards.length > 0 ? overdueCards.map((c) => `[VENCIDA] ${c.title} (Prazo
             </h4>
             <div className="bg-[#0b101f] p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="text-[11px] font-mono text-slate-400 block mb-1">Custo Total Previsto no Período</span>
+                <span className="text-[11px] font-mono text-slate-400 block mb-1">Saídas do Período</span>
                 <span className="text-3xl font-black font-mono text-emerald-400">
                   {totalFinancial.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                 </span>
                 <span className="text-[10px] font-mono text-slate-500 block mt-1">
-                  Mapeamento baseado em {recurringTasks.length} contas e rotinas configuradas
+                  Entradas {(finance?.income ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · saldo {(finance?.balance ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {recurringTasks.slice(0, 4).map((r) => (
-                  <div key={r.id} className="p-2.5 rounded-xl bg-[#070b14] border border-slate-800 text-xs font-mono">
-                    <span className="text-slate-400 block text-[10px] truncate max-w-32">{r.title}</span>
+                {topExpenses.slice(0, 4).map((r, i) => (
+                  <div key={`${r.description}-${i}`} className="p-2.5 rounded-xl bg-[#070b14] border border-slate-800 text-xs font-mono">
+                    <span className="text-slate-400 block text-[10px] truncate max-w-32">{r.description}</span>
                     <span className="text-emerald-400 font-bold">
                       {r.amount ? r.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "R$ 0,00"}
                     </span>

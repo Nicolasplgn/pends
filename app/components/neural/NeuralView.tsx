@@ -14,6 +14,8 @@ interface NeuralViewProps {
   columns: KanbanColumn[];
   onSelectModule: (modId: string) => void;
   onToggleComplete: (cardId: string) => void;
+  onCardClick?: (cardId: string) => void; // ✅ Adicionado
+  moduleSpend?: Record<string, { spent: number; budget: number | null }>;
 }
 
 export function NeuralView({
@@ -21,11 +23,12 @@ export function NeuralView({
   columns,
   onSelectModule,
   onToggleComplete,
+  onCardClick,
+  moduleSpend,
 }: NeuralViewProps) {
   const [viewMode, setViewMode] = useState<"orbit" | "grid">("orbit");
   const [selectedModule, setSelectedModule] = useState<NeuralNode | null>(null);
 
-  // Mapeamento das pendências por módulo
   const moduleCardsMap = useMemo(() => {
     const map: Record<string, NeuralCard[]> = {};
     modules.forEach((m) => { map[m.id] = []; });
@@ -43,7 +46,6 @@ export function NeuralView({
   const completedAllTasks = columns.reduce((acc: number, c) => acc + c.cards.filter((card) => card.completed).length, 0);
   const globalCompletionRate = totalAllTasks > 0 ? Math.round((completedAllTasks / totalAllTasks) * 100) : 0;
 
-  // Nós com cálculo polar para órbita e métricas de progresso
   const moduleNodes: NeuralNode[] = useMemo(() => {
     const count = modules.length;
     const centerX = 360;
@@ -70,7 +72,6 @@ export function NeuralView({
     });
   }, [modules, moduleCardsMap]);
 
-  // Listas globais para o Radar
   const allUrgentCards = useMemo(() => {
     const list: NeuralCard[] = [];
     columns.forEach((col) => {
@@ -112,7 +113,6 @@ export function NeuralView({
           </h2>
         </div>
 
-        {/* TOGGLE: ORBITAL vs MODULAR */}
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-[#070b14] border border-slate-800 p-1 rounded-2xl">
             <button
@@ -150,13 +150,14 @@ export function NeuralView({
         </div>
       </div>
 
-{/* RENDERIZAÇÃO DA VISÃO ESCOLHIDA */}
-{viewMode === "orbit" ? (
+      {/* RENDERIZAÇÃO DA VISÃO ESCOLHIDA */}
+      {viewMode === "orbit" ? (
         <NeuralOrbit
           moduleNodes={moduleNodes}
           totalAllTasks={totalAllTasks}
           onSelectNode={(node) => setSelectedModule(node)}
-          onToggleComplete={onToggleComplete} // ✅ SÓ PRECISAVA ADICIONAR ISSO AQUI
+          onToggleComplete={onToggleComplete}
+          onCardClick={onCardClick} // ✅ Passando para o Orbit
         />
       ) : (
         <NeuralGrid
@@ -167,6 +168,9 @@ export function NeuralView({
           allOverdueCards={allOverdueCards}
           onSelectModule={(node) => setSelectedModule(node)}
           onToggleComplete={onToggleComplete}
+          onCardClick={onCardClick} // ✅ Abre a ficha da tarefa ao clicar
+          onGoToPipeline={onSelectModule} // ✅ Vai direto pro Kanban filtrado
+          moduleSpend={moduleSpend}
         />
       )}
 
