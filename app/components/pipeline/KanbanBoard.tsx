@@ -1,16 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Module } from "@prisma/client";
 import { 
-  DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, 
-  useSensor, useSensors, PointerSensor 
+  DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners,
+  useSensor, useSensors, PointerSensor, TouchSensor, KeyboardSensor
 } from "@dnd-kit/core";
-import { ChevronLeft, ChevronRight, Filter, Plus } from "lucide-react";
+import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { 
+  ChevronLeft, ChevronRight, Filter, Plus, Search, 
+  Flame, Clock, LayoutGrid, Rows3, Table, Snowflake 
+} from "lucide-react";
 import type { KanbanColumn as KanbanColumnType, KanbanCardData } from "../../types";
-import { MONTH_NAMES } from "../../types";
+import { MONTH_NAMES, isCardOverdue } from "../../types";
 import { KanbanColumn } from "./KanbanColumn";
-import { moveCard, createColumn, updateColumn, deleteColumn } from "../../actions";
+import { KanbanTableView } from "./KanbanTableView";
+import { ColumnModal } from "../shared/ColumnModal";
+import { ConfirmModal } from "../shared/ConfirmModal";
+import { moveCard, createColumn, updateColumn, deleteColumn, moveColumn, reorderColumnCards, quickCreateCard } from "../../actions";
 
 interface KanbanBoardProps {
   columns: KanbanColumnType[];
@@ -48,11 +55,123 @@ export function KanbanBoard({
   const [kanbanMonthFilter, setKanbanMonthFilter] = useState<"month" | "all">("all");
   const [activeDraggingCard, setActiveDraggingCard] = useState<KanbanCardData | null>(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // CONTROLES DE DENSIDADE E BUSCA
+  const [searchQuery, setSearchQuery] = useState("");
+  const [focusFilter, setFocusFilter] = useState<"all" | "urgent" | "overdue" | "icebox">("all");
+  // Lembra a densidade escolhida entre sessões (o board só monta no cliente, após login)
+  const [viewDensity, setViewDensity] = useState<"compact" | "detailed" | "table">(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("pends:kanbanDensity") : null;
+      if (saved === "compact" || saved === "detailed" || saved === "table") return saved;
+    } catch {}
+    return "compact";
+  });
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem("pends:kanbanDensity", viewDensity); } catch {}
+  }, [viewDensity]);
+
+  // Atalho: "/" foca a busca
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable) return;
+      if (e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // MODAIS
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [editingColumn, setEditingColumn] = useState<KanbanColumnType | null>(null);
+  const [deleteTargetColumnId, setDeleteTargetColumnId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const totalCardCount = columns.reduce((acc, col) => acc + col.cards.length, 0);
   const getCardCountByModule = (modId: string) =>
     columns.reduce((acc, col) => acc + col.cards.filter((c) => c.moduleId === modId).length, 0);
+
+  const totalIcebox = useMemo(() => {
+    return columns
+      .filter((col) => /gelo|icebox|radar|espera|sem pressa/i.test(col.title))
+      .reduce((sum, col) => sum + col.cards.length, 0);
+  }, [columns]);
+
+  const totalOverdue = useMemo(() => {
+    return columns.flatMap((col) =>
+      col.cards.filter((card) => !card.completed && !col.isDone && isCardOverdue(card.dueDate))
+    ).length;
+  }, [columns]);
+
+  const totalUrgent = useMemo(() => {
+    return columns.flatMap((col) =>
+      col.cards.filter((card) => !card.completed && (card.priority === "Urgente" || card.priority === "Alta"))
+    ).length;
+  }, [columns]);
+
+  const isCardMatchingFilters = (card: KanbanCardData) => {
+    const matchesModule = activeModuleFilter === "all" || card.moduleId === activeModuleFilter;
+    if (!matchesModule) return false;
+
+    if (kanbanMonthFilter === "month") {
+      if (!card.dueDate) return true;
+      const d = new Date(card.dueDate);
+      if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) return false;
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchesTitle = card.title.toLowerCase().includes(q);
+      const matchesDesc = (card.description || "").toLowerCase().includes(q);
+      if (!matchesTitle && !matchesDesc) return false;
+    }
+
+    if (focusFilter === "urgent") {
+      if (card.priority !== "Urgente" && card.priority !== "Alta") return false;
+    }
+
+    if (focusFilter === "overdue") {
+      if (!isCardOverdue(card.dueDate, card.completed)) return false;
+    }
+
+    if (focusFilter === "icebox") {
+      const parentCol = columns.find((c) => c.cards.some((item) => item.id === card.id));
+      if (!parentCol || !/gelo|icebox|radar|espera|sem pressa/i.test(parentCol.title)) return false;
+    }
+
+    return true;
+  };
+
+  const allFilteredCards = columns.flatMap((col) => col.cards).filter(isCardMatchingFilters);
+
+  // MOVER COLUNA OTIMISTAMENTE PARA A ESQUERDA OU DIREITA
+  async function handleMoveColumnPosition(colId: string, direction: "left" | "right") {
+    const currentIndex = columns.findIndex((c) => c.id === colId);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= columns.length) return;
+
+    // Atualização otimista imediata na interface
+    const newColumns = [...columns];
+    const [movedCol] = newColumns.splice(currentIndex, 1);
+    newColumns.splice(targetIndex, 0, movedCol);
+    setColumns(newColumns);
+
+    // Persistência no servidor
+    await moveColumn(colId, direction);
+    void onReload();
+  }
 
   function handleDragStart(event: DragStartEvent) {
     const activeId = event.active.id as string;
@@ -74,39 +193,48 @@ export function KanbanBoard({
     const overId = over.id as string;
 
     const sourceCol = columns.find((col) => col.cards.some((c) => c.id === activeCardId));
-    if (!sourceCol) return;
+    const targetCol =
+      columns.find((col) => col.id === overId) ?? columns.find((col) => col.cards.some((c) => c.id === overId));
+    if (!sourceCol || !targetCol) return;
 
-    let targetColId = columns.find((col) => col.id === overId)?.id;
-    if (!targetColId) targetColId = columns.find((col) => col.cards.some((c) => c.id === overId))?.id;
-    if (!targetColId || targetColId === sourceCol.id) return;
+    const movingCard = sourceCol.cards.find((c) => c.id === activeCardId)!;
+    let newTargetCards: KanbanCardData[];
 
-    const targetCol = columns.find((c) => c.id === targetColId);
-    const movingCard = sourceCol.cards.find((c) => c.id === activeCardId);
-    if (!movingCard || !targetCol) return;
+    if (sourceCol.id === targetCol.id) {
+      // Reordenação dentro da mesma etapa
+      const oldIdx = sourceCol.cards.findIndex((c) => c.id === activeCardId);
+      const newIdx = sourceCol.cards.findIndex((c) => c.id === overId);
+      if (newIdx === -1 || oldIdx === newIdx) return;
+      newTargetCards = arrayMove(sourceCol.cards, oldIdx, newIdx);
+    } else {
+      // Mudança de etapa: entra na posição do card sob o cursor (ou no fim)
+      const rest = targetCol.cards.filter((c) => c.id !== activeCardId);
+      const overIdx = rest.findIndex((c) => c.id === overId);
+      const insertAt = overIdx === -1 ? rest.length : overIdx;
+      const moved = {
+        ...movingCard,
+        columnId: targetCol.id,
+        completed: targetCol.isDone,
+        completedAt: targetCol.isDone ? new Date() : null,
+      };
+      newTargetCards = [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)];
+    }
 
     setColumns((prev) =>
       prev.map((col) => {
+        if (col.id === targetCol.id) return { ...col, cards: newTargetCards };
         if (col.id === sourceCol.id) return { ...col, cards: col.cards.filter((c) => c.id !== activeCardId) };
-        if (col.id === targetColId) {
-          return {
-            ...col,
-            cards: [
-              ...col.cards,
-              {
-                ...movingCard,
-                columnId: targetColId,
-                completed: targetCol.isDone,
-                completedAt: targetCol.isDone ? new Date() : null,
-              },
-            ],
-          };
-        }
         return col;
       })
     );
 
-    await moveCard(activeCardId, targetColId);
+    await reorderColumnCards(targetCol.id, newTargetCards.map((c) => c.id), activeCardId);
     void onReload();
+  }
+
+  async function handleQuickCreate(colId: string, title: string) {
+    await quickCreateCard(colId, title, activeModuleFilter !== "all" ? activeModuleFilter : null);
+    await onReload();
   }
 
   async function handleQuickAdvance(cardId: string) {
@@ -148,34 +276,48 @@ export function KanbanBoard({
     void onReload();
   }
 
-  async function handleAddColumn() {
-    const title = prompt("Digite o nome da nova Etapa do Kanban:");
-    if (title && title.trim()) {
-      const isDone = confirm("Esta etapa representa a CONCLUSÃO / ENTREGA das pendências?");
-      await createColumn(title.trim(), isDone);
-      void onReload();
+  async function handleSaveColumn(title: string, isDone: boolean) {
+    if (editingColumn) {
+      await updateColumn(editingColumn.id, title, isDone);
+    } else {
+      await createColumn(title, isDone);
     }
+    await onReload();
   }
 
-  async function handleEditColumn(col: KanbanColumnType) {
-    const newTitle = prompt("Novo nome para a etapa:", col.title);
-    if (newTitle && newTitle.trim()) {
-      const isDone = confirm("Esta etapa representa a CONCLUSÃO / FINALIZAÇÃO das pendências?");
-      await updateColumn(col.id, newTitle.trim(), isDone);
-      void onReload();
-    }
-  }
-
-  async function handleDeleteColumn(colId: string) {
-    if (confirm("Tem certeza? Todas as pendências desta etapa serão excluídas!")) {
-      await deleteColumn(colId);
-      void onReload();
-    }
+  async function handleConfirmDeleteColumn() {
+    if (!deleteTargetColumnId) return;
+    await deleteColumn(deleteTargetColumnId);
+    setDeleteTargetColumnId(null);
+    await onReload();
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* SUBHEADER: NAVEGADOR DE MESES E FILTROS */}
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#050811]">
+      
+      {/* MODAL MODERNO DE CRIAR/EDITAR ETAPA */}
+      <ColumnModal
+        isOpen={isColumnModalOpen}
+        onClose={() => {
+          setIsColumnModalOpen(false);
+          setEditingColumn(null);
+        }}
+        column={editingColumn}
+        onSave={handleSaveColumn}
+      />
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      <ConfirmModal
+        isOpen={!!deleteTargetColumnId}
+        onClose={() => setDeleteTargetColumnId(null)}
+        title="Excluir Etapa do Kanban?"
+        description="Tem certeza? Todas as pendências que estiverem dentro desta etapa serão excluídas permanentemente."
+        confirmText="Sim, Excluir Etapa"
+        danger={true}
+        onConfirm={handleConfirmDeleteColumn}
+      />
+
+      {/* BARRA SUPERIOR 1: NAVEGADOR DE MÊS + MÓDULOS */}
       <div className="bg-[#0b101d] border-b border-slate-800/80 px-4 sm:px-8 py-2.5 flex items-center justify-between overflow-x-auto shrink-0 gap-3">
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center gap-2 bg-[#070a12] border border-slate-800 px-3 py-1 rounded-xl font-mono text-xs">
@@ -205,12 +347,13 @@ export function KanbanBoard({
 
           <div className="h-5 w-px bg-slate-800 mx-1" />
 
+          {/* MÓDULOS DE VIDA */}
           <button
             type="button"
             onClick={() => setActiveModuleFilter("all")}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer border shrink-0 ${
               activeModuleFilter === "all"
-                ? "bg-blue-600 text-white border-blue-400"
+                ? "bg-blue-600 text-white border-blue-400 shadow-md"
                 : "bg-[#070a12] text-slate-400 border-slate-800 hover:text-white"
             }`}
           >
@@ -243,65 +386,194 @@ export function KanbanBoard({
         </div>
       </div>
 
-      {/* ÁREA DE COLUNAS COM DRAG & DROP */}
-      <div className="flex-1 p-4 sm:p-8 overflow-x-auto flex gap-5 items-start">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          {columns.map((col) => {
-            const filteredCards = col.cards.filter((card) => {
-              const matchesModule = activeModuleFilter === "all" || card.moduleId === activeModuleFilter;
-              if (!matchesModule) return false;
+      {/* BARRA SUPERIOR 2: BUSCA, FILTROS RÁPIDOS & GELO */}
+      <div className="bg-[#070b14] border-b border-slate-800/80 px-4 sm:px-8 py-2 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+        
+        <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="relative w-full">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input 
+              ref={searchRef}
+              type="text" 
+              placeholder="Buscar pendências...  ( / )" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#0b101f] border border-slate-800 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-all font-sans"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs cursor-pointer">
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
 
-              if (kanbanMonthFilter === "month") {
-                if (!card.dueDate) return true;
-                const d = new Date(card.dueDate);
-                return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-              }
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-[#0b101f] border border-slate-800 p-0.5 rounded-xl text-xs font-mono">
+            <button
+              onClick={() => setFocusFilter("all")}
+              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                focusFilter === "all" ? "bg-slate-800 text-white font-bold" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Tudo
+            </button>
+            <button
+              onClick={() => setFocusFilter("urgent")}
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer ${
+                focusFilter === "urgent" ? "bg-amber-500/20 text-amber-300 font-bold" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Flame size={12} className="text-amber-400" />
+              <span>Urgentes ({totalUrgent})</span>
+            </button>
+            <button
+              onClick={() => setFocusFilter("overdue")}
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer ${
+                focusFilter === "overdue" ? "bg-red-500/20 text-red-300 font-bold" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Clock size={12} className="text-red-400" />
+              <span>Vencidas ({totalOverdue})</span>
+            </button>
+            
+            {totalIcebox > 0 && (
+              <button
+                onClick={() => setFocusFilter((f) => (f === "icebox" ? "all" : "icebox"))}
+                className={`px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer ${
+                  focusFilter === "icebox" ? "bg-cyan-500/25 text-cyan-300 font-bold border border-cyan-500/40" : "text-slate-400 hover:text-cyan-300"
+                }`}
+                title="Ver apenas tarefas no Radar (Sem pressa)"
+              >
+                <Snowflake size={12} className="text-cyan-400" />
+                <span>Gelo ({totalIcebox})</span>
+              </button>
+            )}
+          </div>
 
-              return true;
-            });
+          <div className="h-4 w-px bg-slate-800 hidden sm:block" />
 
-            return (
-              <KanbanColumn
-                key={col.id}
-                col={col}
-                cards={filteredCards}
-                onEdit={() => { void handleEditColumn(col); }}
-                onDelete={() => { void handleDeleteColumn(col.id); }}
-                onAddCard={() => onOpenCreateInColumn(col.id)}
-                onCardClick={(cardId) => onCardClick(cardId)}
-                modules={modules}
-                onNextStage={handleQuickAdvance}
-                onChangeModule={onQuickChangeModule}
-                onToggleComplete={onToggleComplete}
-              />
-            );
-          })}
+          <div className="flex items-center bg-[#0b101f] border border-slate-800 p-0.5 rounded-xl text-xs font-mono">
+            <button
+              onClick={() => setViewDensity("compact")}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewDensity === "compact" ? "bg-blue-600/20 text-blue-300" : "text-slate-500 hover:text-slate-300"
+              }`}
+              title="Modo Compacto"
+            >
+              <Rows3 size={15} />
+            </button>
+            <button
+              onClick={() => setViewDensity("detailed")}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewDensity === "detailed" ? "bg-blue-600/20 text-blue-300" : "text-slate-500 hover:text-slate-300"
+              }`}
+              title="Modo Detalhado"
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              onClick={() => setViewDensity("table")}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewDensity === "table" ? "bg-blue-600/20 text-blue-300" : "text-slate-500 hover:text-slate-300"
+              }`}
+              title="Modo Lista"
+            >
+              <Table size={15} />
+            </button>
+          </div>
+        </div>
 
-          <button
-            type="button"
-            onClick={() => { void handleAddColumn(); }}
-            className="w-72 shrink-0 border-2 border-dashed border-slate-800 hover:border-blue-500/50 hover:bg-slate-900/30 p-5 rounded-2xl flex items-center justify-center gap-2 text-slate-500 hover:text-blue-400 text-xs font-bold font-mono transition-all cursor-pointer"
-          >
-            <Plus size={16} /> NOVA ETAPA
-          </button>
-
-          <DragOverlay>
-            {activeDraggingCard ? (
-              <div className="w-80 bg-[#151d30] p-4 rounded-2xl border-2 border-blue-500 shadow-2xl opacity-90 rotate-2 cursor-grabbing pointer-events-none">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white bg-blue-600 block w-max mb-1">
-                  {activeDraggingCard.module?.title || "Geral"}
-                </span>
-                <h4 className="font-bold text-white text-sm">{activeDraggingCard.title}</h4>
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
       </div>
+
+      {/* PROGRESSO DO RECORTE ATUAL */}
+      {allFilteredCards.length > 0 && (() => {
+        const doneCount = allFilteredCards.filter((c) => c.completed).length;
+        const pct = Math.round((doneCount / allFilteredCards.length) * 100);
+        return (
+          <div className="px-4 sm:px-8 pt-3 flex items-center gap-3 text-[10px] font-mono text-slate-500 shrink-0">
+            <div className="flex-1 h-1 rounded-full bg-slate-900 overflow-hidden">
+              <div className="h-full bg-emerald-500/80 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+            </div>
+            <span><b className="text-slate-300">{doneCount}</b>/{allFilteredCards.length} concluídas · {pct}%</span>
+          </div>
+        );
+      })()}
+
+      {/* ÁREA DE EXIBIÇÃO: KANBAN vs TABELA */}
+      {viewDensity === "table" ? (
+        <KanbanTableView
+          columns={columns}
+          filteredCards={allFilteredCards}
+          modules={modules}
+          onCardClick={onCardClick}
+          onToggleComplete={(cardId: string) => { void onToggleComplete(cardId); }}
+          onChangeModule={(cardId: string, modId: string) => { void onQuickChangeModule(cardId, modId); }}
+        />
+      ) : (
+        <div className="flex-1 p-4 sm:p-8 overflow-x-auto flex gap-5 items-start">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            {columns.map((col, index) => {
+              const filteredCards = col.cards.filter(isCardMatchingFilters);
+
+              return (
+                <KanbanColumn
+                  key={col.id}
+                  col={col}
+                  cards={filteredCards}
+                  density={viewDensity}
+                  canMoveLeft={index > 0}
+                  canMoveRight={index < columns.length - 1}
+                  onMoveLeft={() => void handleMoveColumnPosition(col.id, "left")}
+                  onMoveRight={() => void handleMoveColumnPosition(col.id, "right")}
+                  onEdit={() => {
+                    setEditingColumn(col);
+                    setIsColumnModalOpen(true);
+                  }}
+                  onDelete={() => {
+                    setDeleteTargetColumnId(col.id);
+                  }}
+                  onAddCard={() => onOpenCreateInColumn(col.id)}
+                  onQuickAdd={(title) => handleQuickCreate(col.id, title)}
+                  onCardClick={(cardId) => onCardClick(cardId)}
+                  modules={modules}
+                  onNextStage={handleQuickAdvance}
+                  onChangeModule={onQuickChangeModule}
+                  onToggleComplete={onToggleComplete}
+                />
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingColumn(null);
+                setIsColumnModalOpen(true);
+              }}
+              className="w-72 shrink-0 border-2 border-dashed border-slate-800 hover:border-blue-500/50 hover:bg-slate-900/30 p-5 rounded-3xl flex items-center justify-center gap-2 text-slate-500 hover:text-blue-400 text-xs font-bold font-mono transition-all cursor-pointer"
+            >
+              <Plus size={16} /> NOVA ETAPA
+            </button>
+
+            <DragOverlay>
+              {activeDraggingCard ? (
+                <div className="w-80 bg-[#151d30] p-4 rounded-2xl border-2 border-blue-500 shadow-2xl opacity-90 rotate-2 cursor-grabbing pointer-events-none">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white bg-blue-600 block w-max mb-1">
+                    {activeDraggingCard.module?.title || "Geral"}
+                  </span>
+                  <h4 className="font-bold text-white text-sm">{activeDraggingCard.title}</h4>
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </div>
+      )}
+
     </div>
   );
 }

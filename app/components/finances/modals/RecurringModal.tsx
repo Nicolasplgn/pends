@@ -1,112 +1,164 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Module } from "@prisma/client";
-import { Wallet } from "lucide-react";
+import { X, ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { createRecurringTask, updateRecurringTask } from "@/app/actions";
+import type { FinanceRecurring, PayMethod, TxType } from "../../../types";
+import { PAY_METHOD_LABEL } from "../../../types";
+import { moneyToInput, parseMoney } from "../format";
+import { MethodIcon } from "../ui";
 
 interface RecurringModalProps {
   isOpen: boolean;
   onClose: () => void;
-  editingRecurring: any;
+  onSaved: (message: string) => void;
+  initialData?: FinanceRecurring | null;
   modules: Module[];
-  onSave: (title: string, amount: number | null, dueDay: number | null, moduleId: string) => Promise<void>;
 }
 
-export function RecurringModal({
-  isOpen,
-  onClose,
-  editingRecurring,
-  modules,
-  onSave,
-}: RecurringModalProps) {
-  const [recTitle, setRecTitle] = useState("");
-  const [recAmount, setRecAmount] = useState("");
-  const [recDueDay, setRecDueDay] = useState("");
-  const [newModuleId, setNewModuleId] = useState("");
+const inputCls =
+  "w-full bg-[#050811] border border-slate-800 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500";
+const labelCls = "text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1";
+
+export function RecurringModal({ isOpen, onClose, onSaved, initialData, modules }: RecurringModalProps) {
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<TxType>("EXPENSE");
+  const [amount, setAmount] = useState("");
+  const [dueDay, setDueDay] = useState("10");
+  const [moduleId, setModuleId] = useState("");
+  const [method, setMethod] = useState<PayMethod>("BOLETO");
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (editingRecurring) {
-      setRecTitle(editingRecurring.title);
-      setRecAmount(editingRecurring.amount ? editingRecurring.amount.toString() : "");
-      setRecDueDay(editingRecurring.dueDay ? editingRecurring.dueDay.toString() : "");
-      setNewModuleId(editingRecurring.moduleId || "");
-    } else {
-      setRecTitle("");
-      setRecAmount("");
-      setRecDueDay("");
-      setNewModuleId("");
-    }
-  }, [editingRecurring, isOpen]);
+    if (!isOpen) return;
+    setError("");
+    setTitle(initialData?.title ?? "");
+    setType(initialData?.type ?? "EXPENSE");
+    setAmount(moneyToInput(initialData?.amount));
+    setDueDay(String(initialData?.dueDay ?? 10));
+    setModuleId(initialData?.moduleId ?? modules[0]?.id ?? "");
+    setMethod((initialData?.paymentMethod as PayMethod) ?? "BOLETO");
+  }, [isOpen, initialData, modules]);
 
   if (!isOpen) return null;
 
-  async function handleSubmit() {
-    if (!recTitle.trim() || saving) return;
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const value = parseMoney(amount);
+    if (!title.trim()) return setError("Dá um nome pra conta.");
+    if (!(value > 0)) return setError("Informe o valor mensal.");
     setSaving(true);
     try {
-      const finalAmount = recAmount ? parseFloat(recAmount) : null;
-      const finalDueDay = recDueDay ? parseInt(recDueDay) : null;
-      await onSave(recTitle.trim(), finalAmount, finalDueDay, newModuleId);
+      const payload = {
+        title,
+        amount: value,
+        dueDay: Number(dueDay) || null,
+        moduleId: moduleId || null,
+        type,
+        paymentMethod: method,
+      };
+      if (initialData) await updateRecurringTask(initialData.id, payload);
+      else await createRecurringTask(payload);
+      onSaved(initialData ? "Conta fixa atualizada" : "Conta fixa criada");
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-[#0f172a] border border-slate-800 p-6 rounded-3xl w-full max-w-sm shadow-2xl text-slate-200"
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm sm:p-4" onClick={onClose}>
+      <div
+        className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-800 bg-[#0a0f1d] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-base font-bold text-white mb-4 uppercase tracking-wider font-mono flex items-center gap-2">
-          <Wallet size={16} className="text-emerald-400"/> {editingRecurring ? "Editar Conta / Rotina" : "Cadastrar Conta / Rotina"}
-        </h3>
-        <div className="space-y-4">
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Título / Conta</label>
-            <input className="w-full bg-[#070a12] border border-slate-800 p-2.5 rounded-xl text-sm text-white outline-none focus:border-emerald-500" placeholder="Ex: Cartão Nubank" value={recTitle} onChange={e => setRecTitle(e.target.value)} />
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block">Valor Atual (R$)</label>
-              <span className="text-[10px] text-slate-500 font-mono">Pode alterar a qualquer momento</span>
-            </div>
-            <input 
-              type="number" 
-              step="0.01" 
-              className="w-full bg-[#070a12] border border-slate-800 p-2.5 rounded-xl text-sm text-white outline-none focus:border-emerald-500 font-mono" 
-              placeholder="Ex: 1450.00" 
-              value={recAmount} 
-              onChange={e => setRecAmount(e.target.value)} 
-            />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Dia do Vencimento no Mês</label>
-            <input type="number" min="1" max="31" className="w-full bg-[#070a12] border border-slate-800 p-2.5 rounded-xl text-sm text-white outline-none focus:border-emerald-500 font-mono" placeholder="Ex: 10" value={recDueDay} onChange={e => setRecDueDay(e.target.value)} />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Módulo Vinculado</label>
-            <select className="w-full bg-[#070a12] border border-slate-800 p-2.5 rounded-xl text-xs text-white outline-none focus:border-emerald-500 cursor-pointer" value={newModuleId} onChange={e => setNewModuleId(e.target.value)}>
-              <option value="">Nenhum</option>
-              {modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 mt-6">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-400 hover:bg-slate-800 rounded-xl cursor-pointer">Cancelar</button>
-          <button type="button" disabled={saving} onClick={() => { void handleSubmit(); }} className="px-4 py-2 bg-emerald-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-emerald-500 cursor-pointer">
-            {saving ? "Salvando..." : editingRecurring ? "Salvar Alterações" : "Salvar Rotina"}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+            {initialData ? "Editar conta fixa" : "Nova conta fixa"}
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer" aria-label="Fechar">
+            <X size={18} />
           </button>
         </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            {(["EXPENSE", "INCOME"] as TxType[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className={`flex items-center justify-center gap-2 py-2 rounded-xl border text-xs font-bold font-mono cursor-pointer ${
+                  type === t
+                    ? t === "INCOME"
+                      ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400"
+                      : "bg-rose-500/10 border-rose-500/50 text-rose-400"
+                    : "border-slate-800 text-slate-500"
+                }`}
+              >
+                {t === "INCOME" ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                {t === "INCOME" ? "Receita fixa" : "Despesa fixa"}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <label className={labelCls}>Nome</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Aluguel, internet, salário..." className={inputCls} autoFocus />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Valor mensal</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">R$</span>
+                <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" className={`${inputCls} pl-9 font-mono font-bold`} />
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Dia do vencimento</label>
+              <input type="number" min={1} max={31} value={dueDay} onChange={(e) => setDueDay(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Módulo</label>
+              <select value={moduleId} onChange={(e) => setModuleId(e.target.value)} className={inputCls}>
+                <option value="">Sem módulo</option>
+                {modules.map((m) => (
+                  <option key={m.id} value={m.id}>{m.title}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Pagamento</label>
+              <div className="flex items-center gap-2">
+                <MethodIcon method={method} size={14} />
+                <select value={method} onChange={(e) => setMethod(e.target.value as PayMethod)} className={inputCls}>
+                  {Object.entries(PAY_METHOD_LABEL).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-800 text-xs text-slate-400 hover:text-white cursor-pointer">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving} className="px-5 py-2 rounded-lg bg-emerald-500 text-slate-950 text-xs font-bold hover:bg-emerald-400 disabled:opacity-60 cursor-pointer">
+              {saving ? "Salvando..." : "Salvar"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

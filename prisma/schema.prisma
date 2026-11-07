@@ -11,23 +11,27 @@ model Module {
   id             String          @id @default(uuid())
   title          String
   color          String          @default("#3b82f6")
+  budget         Float?          // Teto mensal de gastos do módulo (R$)
   createdAt      DateTime        @default(now())
   cards          Card[]
-  recurringTasks RecurringTask[] // Ligação do módulo com a planilha
+  recurringTasks RecurringTask[]
 }
 
-// NOVA TABELA: PLANILHA DE ROTINAS E FINANÇAS
+// PLANILHA DE ROTINAS E FINANÇAS
 model RecurringTask {
   id        String   @id @default(uuid())
   title     String
   amount    Float?   // Valor (R$) para controle financeiro
   dueDay    Int?     // Dia do vencimento (ex: 15)
   active    Boolean  @default(true)
+  type          String  @default("EXPENSE") // "INCOME" | "EXPENSE"
+  paymentMethod String  @default("BOLETO")  // "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT"
   
   moduleId  String?
   module    Module?  @relation(fields: [moduleId], references: [id])
   
-  cards     Card[]   // Cards que foram gerados a partir desta rotina
+  cards        Card[]
+  transactions Transaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -41,12 +45,12 @@ model Board {
 }
 
 model Column {
-  id      String @id @default(uuid())
+  id      String  @id @default(uuid())
   title   String
   order   Int
   isDone  Boolean @default(false)
   boardId String
-  board   Board  @relation(fields: [boardId], references: [id])
+  board   Board   @relation(fields: [boardId], references: [id])
   cards   Card[]
 }
 
@@ -71,12 +75,14 @@ model Card {
   moduleId        String?
   module          Module?   @relation(fields: [moduleId], references: [id])
 
-  // Identifica se este card veio da planilha de finanças
   recurringTaskId String?
   recurringTask   RecurringTask? @relation(fields: [recurringTaskId], references: [id])
 
   history         History[]
   comments        Comment[]
+
+  // Vínculo financeiro (Lançamentos ligados a este card)
+  transactions    Transaction[]
 }
 
 model History {
@@ -98,4 +104,38 @@ model Comment {
   
   cardId    String
   card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
+
+model Transaction {
+  id                 String    @id @default(uuid())
+  description        String
+  amount             Float
+  type               String    // "INCOME" (Receita) ou "EXPENSE" (Despesa)
+  category           String    // "Moradia", "Faculdade", "Alimentação", etc.
+  paymentMethod      String    // "PIX", "BOLETO", "CREDIT_CARD"
+  dueDate            DateTime
+  paid               Boolean   @default(false)
+  paidAt             DateTime?
+  
+  // Controle de Parcelamento Futuro
+  isInstallment      Boolean   @default(false)
+  installmentCurrent Int?
+  installmentTotal   Int?
+  installmentId      String?
+
+  notes              String?
+
+  // Origem: conta fixa que gerou este lançamento
+  recurringTaskId    String?
+  recurringTask      RecurringTask? @relation(fields: [recurringTaskId], references: [id], onDelete: SetNull)
+
+  // Vínculo opcional com a Pipeline / Card do Kanban
+  cardId             String?
+  card               Card?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([dueDate])
+  @@index([installmentId])
 }
