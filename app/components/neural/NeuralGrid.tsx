@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { 
-  Flame, Calendar, Circle, CheckCircle2, Clock, Zap, 
-  ArrowUpRight, AlertTriangle, ShieldAlert, CheckCheck, ExternalLink, Layers 
+import {
+  Flame, Calendar, Circle, Zap, ArrowUpRight, AlertTriangle, ShieldAlert, Layers
 } from "lucide-react";
 import type { NeuralNode, NeuralCard } from "../../types";
 import { isCardOverdue } from "../../types";
@@ -18,6 +17,7 @@ interface NeuralGridProps {
   onToggleComplete: (cardId: string) => void;
   onCardClick?: (cardId: string) => void;
   onGoToPipeline?: (modId: string) => void;
+  moduleSpend?: Record<string, { spent: number; budget: number | null }>;
 }
 
 // Calcula a diferença exata em dias entre hoje e o prazo
@@ -76,6 +76,7 @@ export function NeuralGrid({
   onToggleComplete,
   onCardClick,
   onGoToPipeline,
+  moduleSpend,
 }: NeuralGridProps) {
   const [heroFilter, setHeroFilter] = useState<"week" | "risk" | "urgent">("week");
 
@@ -458,6 +459,21 @@ export function NeuralGrid({
                   <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-3 px-1">
                     <span>Abertas: <strong className="text-white">{openCards.length}</strong></span>
                     <span>Críticas: <strong className={modUrgent > 0 ? "text-amber-400" : "text-slate-500"}>{modUrgent}</strong></span>
+                    {moduleSpend?.[node.id] && moduleSpend[node.id].spent > 0 && (
+                      <span title={moduleSpend[node.id].budget ? `Teto: R$ ${Math.round(moduleSpend[node.id].budget!)}` : "Gasto do mês"}>
+                        💸{" "}
+                        <strong
+                          className={
+                            moduleSpend[node.id].budget !== null && moduleSpend[node.id].spent > moduleSpend[node.id].budget!
+                              ? "text-rose-400"
+                              : "text-emerald-400"
+                          }
+                        >
+                          {moduleSpend[node.id].spent.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                        </strong>
+                        {moduleSpend[node.id].budget ? <span className="text-slate-500">/{Math.round(moduleSpend[node.id].budget!)}</span> : null}
+                      </span>
+                    )}
                     <span>Feitas: <strong className="text-emerald-400">{node.completed}</strong></span>
                   </div>
 

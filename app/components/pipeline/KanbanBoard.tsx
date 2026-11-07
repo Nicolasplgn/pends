@@ -9,7 +9,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { 
   ChevronLeft, ChevronRight, Filter, Plus, Search, 
-  Flame, Clock, LayoutGrid, Rows3, Table, Snowflake 
+  Flame, Clock, LayoutGrid, Rows3, Table, Snowflake, Repeat
 } from "lucide-react";
 import type { KanbanColumn as KanbanColumnType, KanbanCardData } from "../../types";
 import { MONTH_NAMES, isCardOverdue } from "../../types";
@@ -17,6 +17,7 @@ import { KanbanColumn } from "./KanbanColumn";
 import { KanbanTableView } from "./KanbanTableView";
 import { ColumnModal } from "../shared/ColumnModal";
 import { ConfirmModal } from "../shared/ConfirmModal";
+import { RoutinesModal } from "./RoutinesModal";
 import { moveCard, createColumn, updateColumn, deleteColumn, moveColumn, reorderColumnCards, quickCreateCard } from "../../actions";
 
 interface KanbanBoardProps {
@@ -90,6 +91,7 @@ export function KanbanBoard({
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [editingColumn, setEditingColumn] = useState<KanbanColumnType | null>(null);
   const [deleteTargetColumnId, setDeleteTargetColumnId] = useState<string | null>(null);
+  const [routinesOpen, setRoutinesOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -306,6 +308,13 @@ export function KanbanBoard({
         onSave={handleSaveColumn}
       />
 
+      <RoutinesModal
+        isOpen={routinesOpen}
+        onClose={() => setRoutinesOpen(false)}
+        modules={modules}
+        onChanged={() => void onReload()}
+      />
+
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
       <ConfirmModal
         isOpen={!!deleteTargetColumnId}
@@ -450,6 +459,15 @@ export function KanbanBoard({
               </button>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setRoutinesOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0b101f] border border-slate-800 text-xs font-mono text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40 cursor-pointer transition-colors"
+            title="Tarefas que se repetem toda semana/mês"
+          >
+            <Repeat size={13} /> <span className="hidden sm:inline">Rotinas</span>
+          </button>
 
           <div className="h-4 w-px bg-slate-800 hidden sm:block" />
 

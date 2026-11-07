@@ -187,6 +187,7 @@ export function FinanceOverview({ data, handlers, onSetBudget, onPayCreditCard, 
                         <p className="text-rose-400">Saídas {brl(p.expense)}</p>
                         {p.installments > 0 && <p className="text-violet-400">↳ parcelas {brl(p.installments)}</p>}
                         {p.fixedForecast > 0 && <p className="text-sky-400">↳ fixas previstas {brl(p.fixedForecast)}</p>}
+                        {p.goals > 0 && <p className="text-emerald-300">↳ aportes em metas {brl(p.goals)}</p>}
                         <p className={p.balance >= 0 ? "text-blue-300" : "text-rose-300"}>Saldo {brl(p.balance)}</p>
                       </div>
                     );
@@ -200,7 +201,7 @@ export function FinanceOverview({ data, handlers, onSetBudget, onPayCreditCard, 
             </ResponsiveContainer>
           </div>
           <p className="text-[10px] text-slate-500 font-mono mt-1">
-            Inclui parcelas já lançadas e contas fixas ativas como previsão. Clique num mês para ir até ele.
+            Inclui parcelas já lançadas, contas fixas ativas e aportes planejados em metas. Clique num mês para ir até ele.
           </p>
         </Panel>
       </div>

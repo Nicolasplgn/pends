@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "../lib/prisma";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
+import {
+  SESSION_COOKIE, SESSION_MAX_AGE_S, createSessionToken, credentialsMatch, isAuthenticated, requireAuth,
+} from "../lib/session";
 
 const CURRENT_USER = "Nicolas";
 
@@ -51,41 +54,52 @@ function parseOptionalDate(dateStr?: string | null): Date | null {
 // 0. AUTENTICAÇÃO SEGURA (SERVER-SIDE)
 // ==========================================
 
-export async function loginAction(email: string, pass: string) {
-  const validEmail = process.env.AUTH_EMAIL;
-  const validPass = process.env.AUTH_PASSWORD;
+// Tentativas de login recentes (proteção simples contra força bruta)
+const loginFailures = new Map<string, { count: number; until: number }>();
 
-  if (!validEmail || !validPass) {
-    return { 
-      success: false, 
-      error: "Variáveis de ambiente AUTH_EMAIL ou AUTH_PASSWORD não foram configuradas no servidor." 
+export async function loginAction(email: string, pass: string) {
+  if (!process.env.AUTH_EMAIL || !process.env.AUTH_PASSWORD) {
+    return {
+      success: false,
+      error: "Variáveis de ambiente AUTH_EMAIL ou AUTH_PASSWORD não foram configuradas no servidor.",
     };
   }
 
-  if (email.trim().toLowerCase() === validEmail.trim().toLowerCase() && pass === validPass) {
+  const key = email.trim().toLowerCase() || "_";
+  const fail = loginFailures.get(key);
+  if (fail && fail.until > Date.now()) {
+    return { success: false, error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." };
+  }
+
+  if (credentialsMatch(email, pass)) {
+    loginFailures.delete(key);
+    const token = createSessionToken();
+    if (!token) return { success: false, error: "Falha ao criar sessão." };
     const cookieStore = await cookies();
-    cookieStore.set("pends_session", "authenticated", {
+    cookieStore.set(SESSION_COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 dias de sessão ativa
+      maxAge: SESSION_MAX_AGE_S,
     });
     return { success: true };
   }
 
+  // Atraso fixo + bloqueio de 5 min após 5 erros seguidos
+  const count = (fail?.count ?? 0) + 1;
+  loginFailures.set(key, { count, until: count >= 5 ? Date.now() + 5 * 60_000 : 0 });
+  await new Promise((r) => setTimeout(r, 600));
   return { success: false, error: "Credenciais inválidas. Verifique usuário e senha." };
 }
 
 export async function checkAuthSession(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("pends_session");
-  return session?.value === "authenticated";
+  return isAuthenticated();
 }
 
 export async function logoutAction() {
   const cookieStore = await cookies();
-  cookieStore.delete("pends_session");
+  cookieStore.delete(SESSION_COOKIE);
   revalidatePath("/");
 }
 
@@ -94,6 +108,7 @@ export async function logoutAction() {
 // ==========================================
 
 export async function getModules() {
+  await requireAuth();
   let modules = await prisma.module.findMany({ orderBy: { createdAt: "asc" } });
 
   if (modules.length === 0) {
@@ -114,11 +129,13 @@ export async function getModules() {
 }
 
 export async function createModule(title: string, color: string) {
+  await requireAuth();
   await prisma.module.create({ data: { title, color: color.toUpperCase() } });
   revalidatePath("/");
 }
 
 export async function updateModule(id: string, title: string, color: string) {
+  await requireAuth();
   await prisma.module.update({
     where: { id },
     data: { title, color: color.toUpperCase() }
@@ -127,6 +144,7 @@ export async function updateModule(id: string, title: string, color: string) {
 }
 
 export async function deleteModule(id: string) {
+  await requireAuth();
   await prisma.card.updateMany({
     where: { moduleId: id },
     data: { moduleId: null }
@@ -144,6 +162,7 @@ export async function deleteModule(id: string) {
 // ==========================================
 
 export async function createColumn(title: string, isDone = false) {
+  await requireAuth();
   const board = await prisma.board.findFirst();
   if (!board) return;
   const count = await prisma.column.count({ where: { boardId: board.id } });
@@ -154,6 +173,7 @@ export async function createColumn(title: string, isDone = false) {
 }
 
 export async function updateColumn(id: string, title: string, isDone?: boolean) {
+  await requireAuth();
   await prisma.column.update({
     where: { id },
     data: { 
@@ -165,6 +185,7 @@ export async function updateColumn(id: string, title: string, isDone?: boolean) 
 }
 
 export async function deleteColumn(id: string) {
+  await requireAuth();
   await prisma.card.deleteMany({ where: { columnId: id } });
   await prisma.column.delete({ where: { id } });
   revalidatePath("/");
@@ -187,7 +208,9 @@ const boardInclude = {
 };
 
 export async function getBoardData() {
+  await requireAuth();
   try {
+    await spawnDueRoutines();
     let board = await prisma.board.findFirst({
       include: boardInclude
     });
@@ -220,6 +243,7 @@ export async function getBoardData() {
 // ==========================================
 
 export async function getDashboardStats() {
+  await requireAuth();
   const cards = await prisma.card.findMany({
     include: { module: true, column: true }
   });
@@ -278,6 +302,7 @@ export async function createCard(
   description: string, 
   dueDate?: string
 ) {
+  await requireAuth();
   const count = await prisma.card.count({ where: { columnId } });
   const col = await prisma.column.findUnique({ where: { id: columnId } });
   const isCompleted = col?.isDone ?? false;
@@ -306,6 +331,7 @@ export async function createCard(
 }
 
 export async function moveCard(cardId: string, newColumnId: string) {
+  await requireAuth();
   const card = await prisma.card.findUnique({ where: { id: cardId }, include: { column: true } });
   const newCol = await prisma.column.findUnique({ where: { id: newColumnId } });
 
@@ -337,6 +363,7 @@ export async function moveCard(cardId: string, newColumnId: string) {
  * Se o card mudou de coluna, atualiza status/histórico também.
  */
 export async function reorderColumnCards(columnId: string, orderedIds: string[], movedCardId: string) {
+  await requireAuth();
   const [card, col] = await Promise.all([
     prisma.card.findUnique({ where: { id: movedCardId } }),
     prisma.column.findUnique({ where: { id: columnId } }),
@@ -376,6 +403,7 @@ export async function reorderColumnCards(columnId: string, orderedIds: string[],
 
 /** Criação rápida direto na coluna (só título). */
 export async function quickCreateCard(columnId: string, title: string, moduleId?: string | null) {
+  await requireAuth();
   const clean = title.trim();
   if (!clean) return;
   const [count, col] = await Promise.all([
@@ -397,6 +425,7 @@ export async function quickCreateCard(columnId: string, title: string, moduleId?
 }
 
 export async function toggleCardCompletion(cardId: string) {
+  await requireAuth();
   const card = await prisma.card.findUnique({ where: { id: cardId }, include: { column: true } });
   if (!card) return;
 
@@ -433,6 +462,7 @@ export async function toggleCardCompletion(cardId: string) {
 }
 
 export async function updateCardModule(cardId: string, moduleId: string | null) {
+  await requireAuth();
   await prisma.card.update({
     where: { id: cardId },
     data: { moduleId: moduleId ? moduleId : null }
@@ -441,6 +471,7 @@ export async function updateCardModule(cardId: string, moduleId: string | null) 
 }
 
 export async function getCardDetails(cardId: string) {
+  await requireAuth();
   return await prisma.card.findUnique({
     where: { id: cardId },
     include: {
@@ -460,6 +491,7 @@ export async function updateCardDetails(
   dueDate: string,
   moduleId: string
 ) {
+  await requireAuth();
   await prisma.card.update({
     where: { id },
     data: {
@@ -474,11 +506,13 @@ export async function updateCardDetails(
 }
 
 export async function deleteCard(id: string) {
+  await requireAuth();
   await prisma.card.delete({ where: { id } });
   revalidatePath("/");
 }
 
 export async function addComment(cardId: string, text: string) {
+  await requireAuth();
   await prisma.comment.create({
     data: { text, cardId, user: CURRENT_USER }
   });
@@ -490,6 +524,7 @@ export async function addComment(cardId: string, text: string) {
 // ==========================================
 
 export async function getRecurringTasks() {
+  await requireAuth();
   return await prisma.recurringTask.findMany({
     include: {
       module: true,
@@ -526,16 +561,19 @@ function cleanRecurring(data: RecurringInput) {
 }
 
 export async function createRecurringTask(data: RecurringInput) {
+  await requireAuth();
   await prisma.recurringTask.create({ data: cleanRecurring(data) });
   revalidatePath("/");
 }
 
 export async function updateRecurringTask(id: string, data: RecurringInput) {
+  await requireAuth();
   await prisma.recurringTask.update({ where: { id }, data: cleanRecurring(data) });
   revalidatePath("/");
 }
 
 export async function toggleRecurringActive(id: string) {
+  await requireAuth();
   const r = await prisma.recurringTask.findUnique({ where: { id }, select: { active: true } });
   if (!r) return;
   await prisma.recurringTask.update({ where: { id }, data: { active: !r.active } });
@@ -543,11 +581,150 @@ export async function toggleRecurringActive(id: string) {
 }
 
 export async function deleteRecurringTask(id: string) {
+  await requireAuth();
   // Mantém o histórico: cards e lançamentos já gerados só perdem o vínculo
   await prisma.card.updateMany({ where: { recurringTaskId: id }, data: { recurringTaskId: null } });
   await prisma.transaction.updateMany({ where: { recurringTaskId: id }, data: { recurringTaskId: null } });
   await prisma.recurringTask.delete({ where: { id } });
   revalidatePath("/");
+}
+
+// ---------- ROTINAS DO KANBAN (kind = "TASK") ----------
+
+export interface RoutineInput {
+  title: string;
+  frequency: "MONTHLY" | "WEEKLY";
+  dueDay?: number | null;   // mensal
+  weekday?: number | null;  // semanal (0 = domingo)
+  moduleId?: string | null;
+  priority?: string;
+  active?: boolean;
+}
+
+export async function getRoutines() {
+  await requireAuth();
+  return prisma.recurringTask.findMany({
+    where: { kind: "TASK" },
+    include: {
+      module: true,
+      cards: { select: { id: true, dueDate: true, completed: true }, orderBy: { dueDate: "desc" }, take: 1 },
+    },
+    orderBy: [{ frequency: "asc" }, { title: "asc" }],
+  });
+}
+
+function cleanRoutine(d: RoutineInput) {
+  return {
+    title: d.title.trim(),
+    kind: "TASK",
+    frequency: d.frequency === "WEEKLY" ? "WEEKLY" : "MONTHLY",
+    dueDay: d.frequency === "MONTHLY" ? Math.min(Math.max(Math.round(d.dueDay || 1), 1), 31) : null,
+    weekday: d.frequency === "WEEKLY" ? Math.min(Math.max(Math.round(d.weekday ?? 1), 0), 6) : null,
+    moduleId: d.moduleId || null,
+    priority: d.priority || "Normal",
+    amount: null,
+    ...(d.active !== undefined ? { active: d.active } : {}),
+  };
+}
+
+export async function createRoutine(data: RoutineInput) {
+  await requireAuth();
+  if (!data.title.trim()) throw new Error("Dê um nome para a rotina.");
+  await prisma.recurringTask.create({ data: cleanRoutine(data) });
+  await spawnDueRoutines();
+  revalidatePath("/");
+}
+
+export async function updateRoutine(id: string, data: RoutineInput) {
+  await requireAuth();
+  await prisma.recurringTask.update({ where: { id }, data: cleanRoutine(data) });
+  revalidatePath("/");
+}
+
+/** Ocorrência da rotina no período atual (mês ou semana) e o intervalo desse período. */
+function routineOccurrence(r: { frequency: string; dueDay: number | null; weekday: number | null }, today: Date) {
+  const y = today.getUTCFullYear();
+  const m = today.getUTCMonth();
+  if (r.frequency === "WEEKLY") {
+    const weekStart = new Date(Date.UTC(y, m, today.getUTCDate() - today.getUTCDay(), 0, 0, 0));
+    const date = new Date(weekStart.getTime() + (r.weekday ?? 1) * 86400000 + 12 * 3600000);
+    return { date, start: weekStart, end: new Date(weekStart.getTime() + 7 * 86400000 - 1) };
+  }
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const date = new Date(Date.UTC(y, m, Math.min(r.dueDay || 1, lastDay), 12));
+  return { date, start: new Date(Date.UTC(y, m, 1)), end: new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999)) };
+}
+
+/** Cria (uma vez por período) o card de cada rotina ativa. Idempotente. */
+async function spawnDueRoutines() {
+  const routines = await prisma.recurringTask.findMany({ where: { kind: "TASK", active: true } });
+  if (routines.length === 0) return 0;
+
+  const today = todayMidday();
+  const firstCol = await prisma.column.findFirst({ where: { isDone: false }, orderBy: { order: "asc" } });
+  if (!firstCol) return 0;
+
+  let created = 0;
+  for (const r of routines) {
+    const occ = routineOccurrence(r, today);
+    // Não cria ocorrência que venceu antes de a rotina existir
+    const createdDay = Date.UTC(r.createdAt.getUTCFullYear(), r.createdAt.getUTCMonth(), r.createdAt.getUTCDate(), 12);
+    if (occ.date.getTime() < createdDay) continue;
+
+    const exists = await prisma.card.findFirst({
+      where: { recurringTaskId: r.id, dueDate: { gte: occ.start, lte: occ.end } },
+      select: { id: true },
+    });
+    if (exists) continue;
+
+    const count = await prisma.card.count({ where: { columnId: firstCol.id } });
+    await prisma.card.create({
+      data: {
+        title: r.title,
+        columnId: firstCol.id,
+        moduleId: r.moduleId,
+        priority: r.priority || "Normal",
+        dueDate: occ.date,
+        order: count,
+        recurringTaskId: r.id,
+        description: `Rotina ${r.frequency === "WEEKLY" ? "semanal" : "mensal"} gerada automaticamente.`,
+        history: { create: { action: "Sistema", details: "Gerada pela rotina recorrente", user: CURRENT_USER } },
+      },
+    });
+    created++;
+  }
+  return created;
+}
+
+// ---------- BACKUP & LEMBRETES ----------
+
+/** Exporta tudo em JSON (cópia de segurança pessoal). */
+export async function exportBackup() {
+  await requireAuth();
+  const [modules, boards, columns, cards, history, comments, recurring, transactions, goals] = await Promise.all([
+    prisma.module.findMany(),
+    prisma.board.findMany(),
+    prisma.column.findMany(),
+    prisma.card.findMany(),
+    prisma.history.findMany(),
+    prisma.comment.findMany(),
+    prisma.recurringTask.findMany(),
+    prisma.transaction.findMany(),
+    prisma.goal.findMany(),
+  ]);
+  return {
+    app: "pends",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: { modules, boards, columns, cards, history, comments, recurring, transactions, goals },
+  };
+}
+
+/** Dispara o resumo diário agora (útil para testar a configuração do e-mail). */
+export async function sendDigestNow() {
+  await requireAuth();
+  const { sendDailyDigest } = await import("../lib/reminders");
+  return sendDailyDigest({ force: true });
 }
 
 // ==========================================
@@ -615,6 +792,7 @@ async function healBuggedDates() {
 
 /** Painel completo do mês: lançamentos, resumo, módulos, projeção, parcelas e contas fixas. */
 export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
+  await requireAuth();
   await healBuggedDates();
 
   const { year, month } = safeYearMonth(yearArg, monthArg);
@@ -626,7 +804,7 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
   const projStart = start;
   const projEnd = monthRange(year, month + 5).end;
 
-  const [transactions, carryOver, modules, recurring, projectionTxs, installmentTxs] = await Promise.all([
+  const [transactions, carryOver, modules, recurring, projectionTxs, installmentTxs, goals] = await Promise.all([
     prisma.transaction.findMany({
       where: { dueDate: { gte: start, lte: end } },
       include: txInclude,
@@ -642,7 +820,7 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
         })
       : Promise.resolve([]),
     prisma.module.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.recurringTask.findMany({ include: { module: true }, orderBy: { dueDay: "asc" } }),
+    prisma.recurringTask.findMany({ where: { kind: "FINANCE" }, include: { module: true }, orderBy: { dueDay: "asc" } }),
     prisma.transaction.findMany({
       where: { dueDate: { gte: projStart, lte: projEnd } },
       select: { amount: true, type: true, dueDate: true, recurringTaskId: true, isInstallment: true, paymentMethod: true },
@@ -655,7 +833,12 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
       },
       orderBy: { dueDate: "asc" },
     }),
+    prisma.goal.findMany({ orderBy: { createdAt: "asc" } }),
   ]);
+
+  const goalsMonthly = goals
+    .filter((g) => g.active && g.monthly && g.saved < g.target)
+    .reduce((s, g) => s + Math.min(g.monthly!, g.target - g.saved), 0);
 
   // ---------- RESUMO DO MÊS ----------
   let incomeTotal = 0, incomeReceived = 0, expenseTotal = 0, expensePaid = 0;
@@ -783,9 +966,13 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
         fixedVirtual += rec.amount;
       }
     }
+    // Aportes planejados em metas entram como saída prevista nos meses seguintes
+    const goalsPlanned = i > 0 ? goalsMonthly : 0;
+    expense += goalsPlanned;
     return {
       year: py,
       month: pm,
+      goals: round2(goalsPlanned),
       income: round2(income),
       expense: round2(expense),
       installments: round2(installments),
@@ -837,7 +1024,23 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
     byModule,
     projection,
     installments,
+    goals: goals.map((g) => {
+      const remaining = Math.max(g.target - g.saved, 0);
+      const monthsLeft = g.monthly && g.monthly > 0 ? Math.ceil(remaining / g.monthly) : null;
+      let eta: Date | null = null;
+      if (monthsLeft !== null) eta = new Date(Date.UTC(now.getFullYear(), now.getMonth() + monthsLeft, 1, 12));
+      let neededMonthly: number | null = null;
+      if (g.deadline && remaining > 0) {
+        const months = Math.max(
+          (g.deadline.getUTCFullYear() - now.getFullYear()) * 12 + (g.deadline.getUTCMonth() - now.getMonth()),
+          1
+        );
+        neededMonthly = round2(remaining / months);
+      }
+      return { ...g, remaining: round2(remaining), monthsLeft, eta, neededMonthly };
+    }),
     summary: {
+      goalsMonthly: round2(goalsMonthly),
       incomeTotal: round2(incomeTotal),
       incomeReceived: round2(incomeReceived),
       expenseTotal: round2(expenseTotal),
@@ -860,6 +1063,7 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
 
 /** Compatibilidade: lista simples dos lançamentos reais do mês. */
 export async function getTransactions(year?: number, month?: number) {
+  await requireAuth();
   const { year: y, month: m } = safeYearMonth(year, month);
   const { start, end } = monthRange(y, m);
   return prisma.transaction.findMany({
@@ -890,6 +1094,7 @@ export async function createTransaction(
     amountMode?: "PARCEL" | "TOTAL";
   }
 ) {
+  await requireAuth();
   const description = data.description.trim();
   if (!description) throw new Error("Descrição obrigatória.");
   if (!(data.amount > 0)) throw new Error("Valor precisa ser maior que zero.");
@@ -956,6 +1161,7 @@ export async function createTransaction(
 }
 
 export async function updateTransaction(id: string, data: TransactionInput, scope: TxScope = "one") {
+  await requireAuth();
   const current = await prisma.transaction.findUnique({ where: { id } });
   if (!current) throw new Error("Lançamento não encontrado.");
 
@@ -1016,6 +1222,7 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
 }
 
 export async function toggleTransactionPaid(id: string) {
+  await requireAuth();
   const current = await prisma.transaction.findUnique({ where: { id }, select: { paid: true, cardId: true } });
   if (!current) return { success: false };
 
@@ -1031,6 +1238,7 @@ export async function toggleTransactionPaid(id: string) {
 
 /** Marca/desmarca vários lançamentos de uma vez (ex.: pagar a fatura inteira). */
 export async function setTransactionsPaid(ids: string[], paid: boolean) {
+  await requireAuth();
   if (ids.length === 0) return { success: true };
   await prisma.transaction.updateMany({
     where: { id: { in: ids }, paid: !paid },
@@ -1048,6 +1256,7 @@ export async function setTransactionsPaid(ids: string[], paid: boolean) {
 }
 
 export async function deleteTransaction(id: string, scope: TxScope | boolean = "one") {
+  await requireAuth();
   const normalized: TxScope = scope === true ? "all" : scope === false ? "one" : scope;
   const item = await prisma.transaction.findUnique({
     where: { id },
@@ -1072,6 +1281,7 @@ export async function deleteTransaction(id: string, scope: TxScope | boolean = "
 
 /** Lança no mês as contas fixas ativas que ainda não foram lançadas (ou só as escolhidas). */
 export async function launchRecurringForMonth(yearArg: number, monthArg: number, onlyIds?: string[]) {
+  await requireAuth();
   const { year, month } = safeYearMonth(yearArg, monthArg);
   const { start, end } = monthRange(year, month);
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -1079,6 +1289,7 @@ export async function launchRecurringForMonth(yearArg: number, monthArg: number,
   const recurring = await prisma.recurringTask.findMany({
     where: {
       amount: { not: null },
+      kind: "FINANCE",
       ...(onlyIds && onlyIds.length ? { id: { in: onlyIds } } : { active: true }),
     },
     include: { module: true },
@@ -1110,6 +1321,7 @@ export async function launchRecurringForMonth(yearArg: number, monthArg: number,
 }
 
 export async function setModuleBudget(moduleId: string, budget: number | null) {
+  await requireAuth();
   await prisma.module.update({
     where: { id: moduleId },
     data: { budget: budget && budget > 0 ? round2(budget) : null },
@@ -1119,6 +1331,7 @@ export async function setModuleBudget(moduleId: string, budget: number | null) {
 
 /** Cria uma pendência no Kanban ligada ao lançamento (pagar = concluir card). */
 export async function sendTransactionToKanban(id: string) {
+  await requireAuth();
   const tx = await prisma.transaction.findUnique({ where: { id } });
   if (!tx) return { success: false };
   if (tx.cardId) return { success: true, cardId: tx.cardId };
@@ -1171,7 +1384,233 @@ async function payLinkedTransactions(cardId: string) {
   });
 }
 
+// ---------- RESUMO PARA ANALYTICS / NEURAL ----------
+
+/** Recorte leve do financeiro: mês atual + histórico de 6 meses + gasto por módulo. */
+export async function getFinanceSnapshot(yearArg?: number, monthArg?: number) {
+  await requireAuth();
+  const { year, month } = safeYearMonth(yearArg, monthArg);
+  const histStart = monthRange(year, month - 5).start;
+  const { start, end } = monthRange(year, month);
+
+  const [txs, modules] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { dueDate: { gte: histStart, lte: end } },
+      select: { amount: true, type: true, paid: true, dueDate: true, category: true, description: true },
+    }),
+    prisma.module.findMany({ select: { id: true, title: true, budget: true } }),
+  ]);
+
+  const history = Array.from({ length: 6 }).map((_, i) => {
+    const r = monthRange(year, month - 5 + i);
+    const list = txs.filter((t) => t.dueDate >= r.start && t.dueDate <= r.end);
+    const income = list.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+    const expense = list.filter((t) => t.type !== "INCOME").reduce((s, t) => s + t.amount, 0);
+    return {
+      year: r.start.getUTCFullYear(),
+      month: r.start.getUTCMonth(),
+      income: round2(income),
+      expense: round2(expense),
+      balance: round2(income - expense),
+    };
+  });
+
+  const current = txs.filter((t) => t.dueDate >= start && t.dueDate <= end);
+  const exp = current.filter((t) => t.type !== "INCOME");
+  const income = current.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+  const expense = exp.reduce((s, t) => s + t.amount, 0);
+  const pending = exp.filter((t) => !t.paid).reduce((s, t) => s + t.amount, 0);
+
+  const moduleSpend: Record<string, { spent: number; budget: number | null }> = {};
+  for (const m of modules) {
+    moduleSpend[m.id] = {
+      spent: round2(exp.filter((t) => t.category === m.title).reduce((s, t) => s + t.amount, 0)),
+      budget: m.budget,
+    };
+  }
+
+  const prev = history[4];
+  return {
+    year,
+    month,
+    income: round2(income),
+    expense: round2(expense),
+    pending: round2(pending),
+    balance: round2(income - expense),
+    expenseChangePct: prev && prev.expense > 0 ? Math.round(((expense - prev.expense) / prev.expense) * 100) : null,
+    topExpenses: [...exp]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
+      .map((t) => ({ description: t.description, amount: t.amount, paid: t.paid })),
+    history,
+    moduleSpend,
+  };
+}
+
+// ---------- IMPORTAÇÃO DE EXTRATO / FATURA ----------
+
+export interface ImportRowInput {
+  key: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: TxType;
+}
+
+function importTokens(desc: string): string[] {
+  const words = desc
+    .normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z\s]/g, " ").split(/\s+/)
+    .filter((w) => w.length >= 3 && !["pix", "compra", "pagamento", "transferencia", "enviada", "recebida", "debito", "credito", "para", "com"].includes(w));
+  const out: string[] = [];
+  if (words[0] && words[1]) out.push(`${words[0]} ${words[1]}`);
+  if (words[0]) out.push(words[0]);
+  return out;
+}
+
+/** Sugere módulo pelo histórico e marca possíveis duplicados (mesmo valor ±1 dia). */
+export async function analyzeImport(rows: ImportRowInput[]) {
+  await requireAuth();
+  if (rows.length === 0) return {};
+  const dates = rows.map((r) => parseLocalDateToMidday(r.date).getTime());
+  const min = new Date(Math.min(...dates) - 2 * 86400000);
+  const max = new Date(Math.max(...dates) + 2 * 86400000);
+
+  const [history, existing] = await Promise.all([
+    prisma.transaction.findMany({ select: { description: true, category: true }, orderBy: { createdAt: "desc" }, take: 3000 }),
+    prisma.transaction.findMany({ where: { dueDate: { gte: min, lte: max } }, select: { amount: true, dueDate: true } }),
+  ]);
+
+  const votes = new Map<string, Map<string, number>>();
+  for (const h of history) {
+    for (const tok of importTokens(h.description)) {
+      const m = votes.get(tok) ?? new Map<string, number>();
+      m.set(h.category, (m.get(h.category) ?? 0) + 1);
+      votes.set(tok, m);
+    }
+  }
+  const best = (tok: string) => {
+    const m = votes.get(tok);
+    if (!m) return null;
+    return [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
+
+  const result: Record<string, { category: string | null; duplicate: boolean }> = {};
+  for (const r of rows) {
+    const t = parseLocalDateToMidday(r.date).getTime();
+    const duplicate = existing.some(
+      (e) => Math.abs(e.amount - r.amount) < 0.005 && Math.abs(e.dueDate.getTime() - t) <= 86400000 + 1
+    );
+    const tokens = importTokens(r.description);
+    result[r.key] = { category: tokens.map(best).find(Boolean) ?? null, duplicate };
+  }
+  return result;
+}
+
+export async function importTransactions(
+  items: (ImportRowInput & { category: string })[],
+  opts: { paymentMethod: PayMethod; paid: boolean; dueDate?: string | null }
+) {
+  await requireAuth();
+  if (items.length === 0) return { created: 0 };
+  const fixedDue = opts.dueDate ? parseLocalDateToMidday(opts.dueDate) : null;
+  await prisma.transaction.createMany({
+    data: items.map((r) => ({
+      description: r.description.trim().slice(0, 200) || "Importado",
+      amount: round2(r.amount),
+      type: r.type,
+      category: r.category || "Geral",
+      paymentMethod: opts.paymentMethod,
+      dueDate: fixedDue ?? parseLocalDateToMidday(r.date),
+      paid: opts.paid,
+      paidAt: opts.paid ? new Date() : null,
+      notes: fixedDue ? `Compra em ${r.date.split("-").reverse().join("/")} (importado)` : "Importado de extrato",
+    })),
+  });
+  revalidatePath("/");
+  return { created: items.length };
+}
+
+// ---------- METAS / RESERVAS ----------
+
+export interface GoalInput {
+  title: string;
+  target: number;
+  monthly?: number | null;
+  deadline?: string | null;
+  color?: string;
+  saved?: number;
+}
+
+export async function createGoal(data: GoalInput) {
+  await requireAuth();
+  if (!data.title.trim() || !(data.target > 0)) throw new Error("Nome e valor alvo são obrigatórios.");
+  await prisma.goal.create({
+    data: {
+      title: data.title.trim(),
+      target: round2(data.target),
+      saved: round2(data.saved ?? 0),
+      monthly: data.monthly && data.monthly > 0 ? round2(data.monthly) : null,
+      deadline: data.deadline ? parseLocalDateToMidday(data.deadline) : null,
+      color: data.color || "#10B981",
+    },
+  });
+  revalidatePath("/");
+}
+
+export async function updateGoal(id: string, data: GoalInput & { active?: boolean }) {
+  await requireAuth();
+  await prisma.goal.update({
+    where: { id },
+    data: {
+      title: data.title.trim(),
+      target: round2(data.target),
+      monthly: data.monthly && data.monthly > 0 ? round2(data.monthly) : null,
+      deadline: data.deadline ? parseLocalDateToMidday(data.deadline) : null,
+      ...(data.color ? { color: data.color } : {}),
+      ...(data.saved !== undefined ? { saved: round2(data.saved) } : {}),
+      ...(data.active !== undefined ? { active: data.active } : {}),
+    },
+  });
+  revalidatePath("/");
+}
+
+export async function deleteGoal(id: string) {
+  await requireAuth();
+  await prisma.goal.delete({ where: { id } });
+  revalidatePath("/");
+}
+
+/**
+ * Aporte (valor positivo) ou resgate (negativo) numa meta.
+ * Com registerTx, vira um lançamento pago na categoria "Metas" para o saldo bater.
+ */
+export async function contributeGoal(id: string, amount: number, registerTx = true) {
+  await requireAuth();
+  const goal = await prisma.goal.findUnique({ where: { id } });
+  if (!goal || !amount) return { success: false };
+  const value = round2(amount);
+  await prisma.goal.update({ where: { id }, data: { saved: round2(Math.max(goal.saved + value, 0)) } });
+  if (registerTx) {
+    await prisma.transaction.create({
+      data: {
+        description: `${value > 0 ? "Aporte" : "Resgate"}: ${goal.title}`,
+        amount: Math.abs(value),
+        type: value > 0 ? "EXPENSE" : "INCOME",
+        category: "Metas",
+        paymentMethod: "PIX",
+        dueDate: todayMidday(),
+        paid: true,
+        paidAt: new Date(),
+      },
+    });
+  }
+  revalidatePath("/");
+  return { success: true };
+}
+
 export async function getKanbanCardsForSelect() {
+  await requireAuth();
   return await prisma.card.findMany({
     select: { id: true, title: true, column: { select: { title: true } } },
     orderBy: { createdAt: "desc" },
@@ -1183,6 +1622,7 @@ export async function getKanbanCardsForSelect() {
 // ==========================================
 
 export async function moveColumn(columnId: string, direction: "left" | "right") {
+  await requireAuth();
   const board = await prisma.board.findFirst({
     include: { columns: { orderBy: { order: "asc" } } }
   });

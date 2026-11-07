@@ -26,6 +26,11 @@ model RecurringTask {
   active    Boolean  @default(true)
   type          String  @default("EXPENSE") // "INCOME" | "EXPENSE"
   paymentMethod String  @default("BOLETO")  // "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT"
+  // "FINANCE" = conta fixa do financeiro · "TASK" = rotina que gera card no Kanban
+  kind          String  @default("FINANCE")
+  frequency     String  @default("MONTHLY") // "MONTHLY" | "WEEKLY"
+  weekday       Int?    // 0 = domingo … 6 = sábado (rotinas semanais)
+  priority      String  @default("Normal")
   
   moduleId  String?
   module    Module?  @relation(fields: [moduleId], references: [id])
@@ -138,4 +143,18 @@ model Transaction {
 
   @@index([dueDate])
   @@index([installmentId])
+}
+
+// METAS / RESERVAS (caixinhas)
+model Goal {
+  id        String    @id @default(uuid())
+  title     String
+  target    Float
+  saved     Float     @default(0)
+  monthly   Float?    // Aporte planejado por mês (entra na projeção)
+  deadline  DateTime?
+  color     String    @default("#10B981")
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }

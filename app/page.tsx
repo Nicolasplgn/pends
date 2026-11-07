@@ -8,11 +8,11 @@ import {
   getModules, getBoardData, getDashboardStats,
   createModule, updateModule, deleteModule,
   toggleCardCompletion, updateCardModule,
-  createCard,
+  createCard, getFinanceSnapshot, exportBackup, sendDigestNow,
   checkAuthSession, logoutAction
 } from "./actions";
 
-import type { KanbanColumn, DashboardStats } from "./types";
+import type { KanbanColumn, DashboardStats, FinanceSnapshot } from "./types";
 
 import { LoginScreen } from "./components/auth/LoginScreen";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -24,6 +24,7 @@ import { FinancesHub } from "./components/finances/FinancesHub";
 import { CardDetailModal } from "./components/shared/CardDetailModal";
 import { ModuleModal } from "./components/shared/ModuleModal";
 import { CreateCardModal } from "./components/shared/CreateCardModal";
+import { CommandPalette } from "./components/shared/CommandPalette";
 
 export default function PendsApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -37,6 +38,11 @@ export default function PendsApp() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
+  const [financeSnap, setFinanceSnap] = useState<FinanceSnapshot | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [newTxSignal, setNewTxSignal] = useState(0);
+  const [flash, setFlash] = useState<string | null>(null);
+
   const [activeModuleFilter, setActiveModuleFilter] = useState<string>("all");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
@@ -47,23 +53,81 @@ export default function PendsApp() {
 
   const loadAll = useCallback(async () => {
     // Finanças carregam dentro do próprio Hub (getFinanceOverview)
-    const [mods, board, dash] = await Promise.all([getModules(), getBoardData(), getDashboardStats()]);
-    setModules(mods);
-    if (board?.columns) setColumns(board.columns);
-    setStats(dash);
+    try {
+      const [mods, board, dash] = await Promise.all([getModules(), getBoardData(), getDashboardStats()]);
+      setModules(mods);
+      if (board?.columns) setColumns(board.columns);
+      setStats(dash);
+    } catch (err) {
+      // Sessão inválida/expirada → volta para o login
+      if (!(await checkAuthSession())) setIsAuthenticated(false);
+      else console.error("Erro ao carregar dados:", err);
+    }
+  }, []);
+
+  // PWA: registra o service worker (instalável no celular)
+  useEffect(() => {
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
     checkAuthSession().then((isAuth) => {
-      if (isAuth) setIsAuthenticated(true);
+      if (isAuth) {
+        setIsAuthenticated(true);
+        void loadAll();
+      }
     });
+  }, [loadAll]);
+
+  // Resumo financeiro para Analytics e Neural (segue o mês selecionado)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let alive = true;
+    getFinanceSnapshot(selectedYear, selectedMonth)
+      .then((snap) => { if (alive) setFinanceSnap(snap); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isAuthenticated, selectedYear, selectedMonth, activeTab]);
+
+  // Ctrl/⌘ + K abre a paleta de comandos
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      void loadAll();
-    }
-  }, [isAuthenticated, loadAll]);
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 3000);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  async function handleBackup() {
+    const data = await exportBackup();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pends-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setFlash("Backup baixado");
+  }
+
+  async function handleSendDigest() {
+    setFlash("Enviando resumo…");
+    const res = await sendDigestNow();
+    if (!res.ok) setFlash(`Falha no envio: ${"error" in res ? res.error : "erro"}`);
+    else if ("simulated" in res && res.simulated) setFlash("Sem RESEND_API_KEY: e-mail simulado no log do servidor");
+    else setFlash("Resumo enviado para o seu e-mail");
+  }
 
   async function handleLogout() {
     await logoutAction();
@@ -116,7 +180,7 @@ export default function PendsApp() {
     }
   }
 
-  if (!isAuthenticated) return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
+  if (!isAuthenticated) return <LoginScreen onLogin={() => { setIsAuthenticated(true); void loadAll(); }} />;
 
   return (
     <div className="h-screen bg-[#050811] flex overflow-hidden font-sans text-slate-300">
@@ -148,6 +212,37 @@ export default function PendsApp() {
         }}
       />
 
+      {paletteOpen && <CommandPalette
+        isOpen={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        modules={modules}
+        columns={columns}
+        onNavigate={(tab) => setActiveTab(tab)}
+        onNewCard={() => {
+          const first = columns.find((c) => !c.isDone) ?? columns[0];
+          if (!first) return;
+          setCreateTargetColumnId(first.id);
+          setShowCreateCardModal(true);
+        }}
+        onNewTransaction={() => {
+          setActiveTab("finances");
+          setNewTxSignal(Date.now());
+        }}
+        onOpenCard={(id) => setSelectedCardId(id)}
+        onFilterModule={(id) => {
+          setActiveModuleFilter(id);
+          setActiveTab("kanban");
+        }}
+        onSendDigest={() => void handleSendDigest()}
+        onBackup={() => void handleBackup()}
+      />}
+
+      {flash && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-90 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white shadow-2xl font-mono">
+          {flash}
+        </div>
+      )}
+
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -159,6 +254,7 @@ export default function PendsApp() {
         onOpenModuleModal={handleOpenModuleModal}
         onDeleteModule={handleDeleteModule}
         onLogout={() => void handleLogout()}
+        onOpenPalette={() => setPaletteOpen(true)}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden bg-[#050811] relative">
@@ -174,7 +270,8 @@ export default function PendsApp() {
 
         {activeTab === "neural" && (
           <NeuralView 
-            modules={modules} 
+            modules={modules}
+            moduleSpend={financeSnap?.moduleSpend} 
             columns={columns} 
             onSelectModule={(modId: string) => { setActiveModuleFilter(modId); setActiveTab("kanban"); }}
             onToggleComplete={async (cardId) => { await toggleCardCompletion(cardId); void loadAll(); }}
@@ -187,7 +284,7 @@ export default function PendsApp() {
             stats={stats}
             modules={modules}
             columns={columns}
-            recurringTasks={[]} // Retirado do antigo sistema, analytics foca no Work OS
+            finance={financeSnap}
             selectedMonth={selectedMonth}
             selectedYear={selectedYear}
             onPrevMonth={handlePrevMonth}
@@ -227,6 +324,7 @@ export default function PendsApp() {
             onSelectMonthYear={(m, y) => { setSelectedMonth(m); setSelectedYear(y); }}
             onOpenCard={(cardId) => setSelectedCardId(cardId)}
             onExternalChange={() => void loadAll()}
+            newTxSignal={newTxSignal}
           />
         )}
       </main>

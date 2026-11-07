@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useRef } from "react";
 import { Cpu, Eye, CheckCircle2, Circle, Calendar, Flame, Clock, Layers, ExternalLink } from "lucide-react";
-import type { NeuralNode, NeuralCard } from "../../types";
+import type { NeuralNode} from "../../types";
 import { isCardOverdue } from "../../types";
 
 interface NeuralOrbitProps {

@@ -1,4 +1,4 @@
-import type { getFinanceOverview, getRecurringTasks } from "../actions";
+import type { getFinanceOverview, getFinanceSnapshot, getRecurringTasks } from "../actions";
 
 export type RecurringTaskData = Awaited<ReturnType<typeof getRecurringTasks>>[number];
 
@@ -9,6 +9,7 @@ export type FinanceInstallmentGroup = FinanceOverview["installments"][number];
 export type FinanceModuleSlice = FinanceOverview["byModule"][number];
 export type FinanceProjectionMonth = FinanceOverview["projection"][number];
 export type FinanceSummary = FinanceOverview["summary"];
+export type FinanceSnapshot = Awaited<ReturnType<typeof getFinanceSnapshot>>;
 
 export type TxType = "INCOME" | "EXPENSE";
 export type PayMethod = "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT";

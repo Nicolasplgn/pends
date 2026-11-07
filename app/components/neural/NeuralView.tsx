@@ -15,6 +15,7 @@ interface NeuralViewProps {
   onSelectModule: (modId: string) => void;
   onToggleComplete: (cardId: string) => void;
   onCardClick?: (cardId: string) => void; // ✅ Adicionado
+  moduleSpend?: Record<string, { spent: number; budget: number | null }>;
 }
 
 export function NeuralView({
@@ -23,6 +24,7 @@ export function NeuralView({
   onSelectModule,
   onToggleComplete,
   onCardClick,
+  moduleSpend,
 }: NeuralViewProps) {
   const [viewMode, setViewMode] = useState<"orbit" | "grid">("orbit");
   const [selectedModule, setSelectedModule] = useState<NeuralNode | null>(null);
@@ -168,6 +170,7 @@ export function NeuralView({
           onToggleComplete={onToggleComplete}
           onCardClick={onCardClick} // ✅ Abre a ficha da tarefa ao clicar
           onGoToPipeline={onSelectModule} // ✅ Vai direto pro Kanban filtrado
+          moduleSpend={moduleSpend}
         />
       )}
 

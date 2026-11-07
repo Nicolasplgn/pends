@@ -2,18 +2,15 @@
 
 import { useMemo, useState } from "react";
 import type { Module } from "@prisma/client";
-import { 
-  Download, FileText, Layers, TrendingUp, Clock, AlertTriangle, 
-  BarChart3, Calendar, Circle, CheckSquare, PieChart as PieIcon, 
-  Wallet, ShieldCheck, Zap, Activity, ArrowUpRight, Flame, 
-  CheckCircle2, Hourglass, Target, Network, AlertCircle 
+import {
+  FileText, Layers, TrendingUp, Clock, AlertTriangle, Calendar, Circle, ShieldCheck, Zap, Activity, ArrowUpRight, Flame, CheckCircle2, Hourglass, Target, Network, AlertCircle
 } from "lucide-react";
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, 
   PieChart, Pie, Cell, CartesianGrid, AreaChart, Area
 } from "recharts";
 
-import type { DashboardStats, KanbanColumn } from "../../types";
+import type { DashboardStats, FinanceSnapshot, KanbanColumn } from "../../types";
 import { MONTH_NAMES, isCardOverdue } from "../../types";
 import { ExecutiveReportModal } from "./ExecutiveReportModal";
 import { DateNavigator } from "../shared/DateNavigator";
@@ -22,7 +19,7 @@ interface AnalyticsDashProps {
   stats: DashboardStats | null;
   modules: Module[];
   columns: KanbanColumn[];
-  recurringTasks: any[];
+  finance: FinanceSnapshot | null;
   selectedMonth: number;
   selectedYear: number;
   onPrevMonth?: () => void;
@@ -47,7 +44,7 @@ export function AnalyticsDash({
   stats,
   modules,
   columns,
-  recurringTasks,
+  finance,
   selectedMonth,
   selectedYear,
   onPrevMonth,
@@ -82,9 +79,11 @@ export function AnalyticsDash({
     return openCols.reduce((prev, curr) => (curr.cards.length > prev.cards.length ? curr : prev));
   }, [columns]);
 
-  const totalMensal = useMemo(() => {
-    return recurringTasks.reduce((acc, r) => acc + (r.amount || 0), 0);
-  }, [recurringTasks]);
+  const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const financeHistory = useMemo(
+    () => (finance?.history ?? []).map((h) => ({ ...h, name: MONTH_NAMES[h.month].slice(0, 3) })),
+    [finance]
+  );
 
   // ==========================================
   // 2. DATA PREPARATION (GRÁFICOS RECHARTS)
@@ -146,7 +145,7 @@ export function AnalyticsDash({
   // ==========================================
 
   const allOpenCards = useMemo(() => {
-    const list: any[] = [];
+    const list: (KanbanColumn["cards"][number] & { colTitle: string })[] = [];
     columns.forEach((col) => {
       if (col.isDone) return;
       col.cards.forEach((card) => {
@@ -220,7 +219,7 @@ export function AnalyticsDash({
         stats={stats}
         modules={modules}
         columns={columns}
-        recurringTasks={recurringTasks}
+        finance={finance}
         selectedMonth={selectedMonth}
         selectedYear={selectedYear}
       />
@@ -564,7 +563,7 @@ export function AnalyticsDash({
                   <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
                   <Tooltip 
                     contentStyle={customTooltipStyle}
-                    formatter={(value: any) => [`${value} tarefas vencendo`, "Volume"]}
+                    formatter={(value) => [`${value} tarefas vencendo`, "Volume"]}
                   />
                   <Bar dataKey="tarefas" fill="#3B82F6" radius={[6, 6, 0, 0]} barSize={25}>
                     {upcomingTimelineData.map((entry, index) => (
@@ -613,11 +612,11 @@ export function AnalyticsDash({
                   <div className="w-6 h-6 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-[10px] font-mono font-bold text-slate-400 shrink-0">
                     {index + 1}
                   </div>
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: c.moduleColor }} />
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: c.module?.color ?? "#64748b" }} />
                   <div className="truncate">
                     <span className="font-semibold text-slate-200 truncate block text-sm">{c.title}</span>
                     <span className="text-[10px] font-mono text-slate-500">
-                      Na etapa: <strong className="text-slate-400">{c.colTitle}</strong> • Módulo: {c.moduleTitle}
+                      Na etapa: <strong className="text-slate-400">{c.colTitle}</strong> • Módulo: {c.module?.title ?? "Geral"}
                     </span>
                   </div>
                 </div>
@@ -680,18 +679,56 @@ export function AnalyticsDash({
 
             <div className="p-4 rounded-2xl bg-[#070b14] border border-slate-800 flex flex-col justify-between relative overflow-hidden">
               <div className="absolute right-0 bottom-0 w-16 h-16 bg-emerald-500/10 blur-2xl" />
-              <div className="relative z-10">
-                <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Impacto Financeiro do Mês</span>
-                <div className="text-2xl font-black font-mono text-emerald-400">
-                  {totalMensal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              <div className="relative z-10 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Saldo do mês</span>
+                    <div className={`text-2xl font-black font-mono ${finance && finance.balance < 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                      {finance ? brl(finance.balance) : "—"}
+                    </div>
+                  </div>
+                  {finance?.expenseChangePct !== null && finance?.expenseChangePct !== undefined && (
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
+                        finance.expenseChangePct > 0
+                          ? "text-rose-300 border-rose-500/40 bg-rose-500/10"
+                          : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10"
+                      }`}
+                      title="Variação dos gastos vs. mês anterior"
+                    >
+                      gastos {finance.expenseChangePct > 0 ? "+" : ""}{finance.expenseChangePct}%
+                    </span>
+                  )}
                 </div>
+                {finance && (
+                  <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
+                    <div><span className="text-slate-500 block">Entradas</span><b className="text-emerald-400">{brl(finance.income)}</b></div>
+                    <div><span className="text-slate-500 block">Saídas</span><b className="text-rose-400">{brl(finance.expense)}</b></div>
+                    <div><span className="text-slate-500 block">A pagar</span><b className="text-amber-400">{brl(finance.pending)}</b></div>
+                  </div>
+                )}
+                {financeHistory.length > 0 && (
+                  <div className="h-28 -mx-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={financeHistory} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                        <XAxis dataKey="name" stroke="#475569" tick={{ fill: "#94a3b8", fontSize: 10 }} />
+                        <Tooltip
+                          contentStyle={customTooltipStyle}
+                          formatter={(v, n) => [brl(Number(v)), n === "income" ? "Entradas" : "Saídas"]}
+                        />
+                        <Bar dataKey="income" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={14} />
+                        <Bar dataKey="expense" fill="#f43f5e" radius={[3, 3, 0, 0]} maxBarSize={14} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
                 onClick={onOpenFinances}
                 className="mt-3.5 text-[11px] font-mono font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer transition-colors relative z-10 w-fit"
               >
-                <span>Acessar Gestão de Gastos</span>
+                <span>Abrir Finanças</span>
                 <ArrowUpRight size={13} />
               </button>
             </div>

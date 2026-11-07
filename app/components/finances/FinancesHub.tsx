@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Module } from "@prisma/client";
 import {
   Plus, LayoutDashboard, ListFilter, Repeat, Layers, ArrowUpRight, ArrowDownRight,
-  AlertTriangle, Send, Wallet, Gauge, Loader2,
+  AlertTriangle, Send, Wallet, Gauge, Loader2, Target, Upload,
 } from "lucide-react";
 import {
   getFinanceOverview, toggleTransactionPaid, setTransactionsPaid, launchRecurringForMonth,
@@ -23,10 +23,12 @@ import { FinanceInstallments } from "./FinanceInstallments";
 import { TransactionModal, type TxModalDefaults } from "./modals/TransactionModal";
 import { DeleteTxModal } from "./modals/DeleteTxModal";
 import { RecurringModal } from "./modals/RecurringModal";
+import { ImportModal } from "./modals/ImportModal";
+import { FinanceGoals } from "./FinanceGoals";
 import { brl } from "./format";
 import { Bar } from "./ui";
 
-type Tab = "overview" | "ledger" | "fixed" | "installments";
+type Tab = "overview" | "ledger" | "fixed" | "installments" | "goals";
 
 interface FinancesHubProps {
   modules: Module[];
@@ -38,10 +40,12 @@ interface FinancesHubProps {
   onOpenCard: (cardId: string) => void;
   /** Recarrega o resto do app (Kanban/Neural) quando algo cruza as fronteiras */
   onExternalChange: () => void;
+  /** Muda de valor quando a paleta (Ctrl+K) pede um novo lançamento */
+  newTxSignal?: number;
 }
 
 export function FinancesHub({
-  modules, selectedMonth, selectedYear, onPrevMonth, onNextMonth, onSelectMonthYear, onOpenCard, onExternalChange,
+  modules, selectedMonth, selectedYear, onPrevMonth, onNextMonth, onSelectMonthYear, onOpenCard, onExternalChange, newTxSignal,
 }: FinancesHubProps) {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +58,7 @@ export function FinancesHub({
   const [recModal, setRecModal] = useState<{ open: boolean; item: Recurring | null }>({ open: false, item: null });
   const [deleteRec, setDeleteRec] = useState<Recurring | null>(null);
   const [deleteGroup, setDeleteGroup] = useState<FinanceInstallmentGroup | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,6 +92,11 @@ export function FinancesHub({
     (type?: "INCOME" | "EXPENSE") => setTxModal({ open: true, tx: null, defaults: { type, dueDate: defaultDate() } }),
     [defaultDate]
   );
+
+  // Pedido vindo da paleta de comandos
+  useEffect(() => {
+    if (newTxSignal) openCreate();
+  }, [newTxSignal, openCreate]);
 
   // Atalho: tecla N abre novo lançamento
   useEffect(() => {
@@ -178,6 +188,7 @@ export function FinancesHub({
     ["ledger", "Lançamentos", <ListFilter size={14} key="l" />, data?.transactions.length],
     ["fixed", "Contas fixas", <Repeat size={14} key="f" />, data?.recurring.length],
     ["installments", "Parcelas", <Layers size={14} key="i" />, data?.installments.length],
+    ["goals", "Metas", <Target size={14} key="g" />, data?.goals.length],
   ];
 
   return (
@@ -292,7 +303,7 @@ export function FinancesHub({
         )}
 
         {/* ABAS + AÇÕES */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sticky top-0 z-20 bg-[#050811]/95 backdrop-blur py-2 -mx-1 px-1">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 sticky top-0 z-20 bg-[#050811]/95 backdrop-blur py-2 -mx-1 px-1">
           <div className="flex items-center gap-1 bg-[#0a0f1d] p-1 border border-slate-800 rounded-xl overflow-x-auto [scrollbar-width:none]">
             {TABS.map(([id, label, icon, count]) => (
               <button
@@ -312,22 +323,30 @@ export function FinancesHub({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
+              onClick={() => setImportOpen(true)}
+              className="flex items-center justify-center gap-1 px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold hover:bg-slate-800 cursor-pointer"
+              title="Importar extrato ou fatura (CSV/OFX)"
+            >
+              <Upload size={14} /> <span className="hidden sm:inline">Importar</span>
+            </button>
+            <button
+              type="button"
               onClick={() => openCreate("INCOME")}
-              className="flex-1 lg:flex-none flex items-center justify-center gap-1 px-3 py-2 rounded-xl border border-emerald-500/40 text-emerald-300 text-xs font-bold hover:bg-emerald-500/10 cursor-pointer"
+              className="flex-1 xl:flex-none flex items-center justify-center gap-1 px-3 py-2 rounded-xl border border-emerald-500/40 text-emerald-300 text-xs font-bold hover:bg-emerald-500/10 cursor-pointer"
             >
               <ArrowUpRight size={14} /> Entrada
             </button>
             <button
               type="button"
               onClick={() => openCreate("EXPENSE")}
-              className="flex-1 lg:flex-none flex items-center justify-center gap-1 px-3 py-2 rounded-xl border border-rose-500/40 text-rose-300 text-xs font-bold hover:bg-rose-500/10 cursor-pointer"
+              className="flex-1 xl:flex-none flex items-center justify-center gap-1 px-3 py-2 rounded-xl border border-rose-500/40 text-rose-300 text-xs font-bold hover:bg-rose-500/10 cursor-pointer"
             >
               <ArrowDownRight size={14} /> Saída
             </button>
             <button
               type="button"
               onClick={() => openCreate()}
-              className="flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 shadow-lg shadow-emerald-500/10 cursor-pointer"
+              className="flex-1 xl:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 shadow-lg shadow-emerald-500/10 cursor-pointer"
               title="Novo lançamento (atalho: N)"
             >
               <Plus size={15} /> Lançar
@@ -375,6 +394,15 @@ export function FinancesHub({
                 onLaunch={(ids) => void handleLaunch(ids)}
               />
             )}
+            {tab === "goals" && (
+              <FinanceGoals
+                goals={data.goals}
+                onChanged={(msg) => {
+                  setToast(msg);
+                  void load();
+                }}
+              />
+            )}
             {tab === "installments" && (
               <FinanceInstallments
                 installments={data.installments}
@@ -399,6 +427,16 @@ export function FinancesHub({
         initialData={txModal.tx}
         defaults={txModal.defaults}
         modules={modules}
+      />
+      <ImportModal
+        isOpen={importOpen}
+        onClose={() => setImportOpen(false)}
+        modules={modules}
+        onImported={(n) => {
+          setToast(`${n} lançamento(s) importado(s)`);
+          setTab("ledger");
+          void load();
+        }}
       />
       <DeleteTxModal
         tx={deleteTx}

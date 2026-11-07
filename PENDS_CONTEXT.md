@@ -39,7 +39,12 @@ Um "sistema operacional pessoal": tarefas em Kanban organizadas por **Módulos d
 - **Parcelamento:** `createTransaction` aceita `amountMode` `TOTAL` (divide, centavos na última) ou `PARCEL`; `updateTransaction`/`deleteTransaction` recebem escopo `one` | `future` | `all`.
 - **Ponte Kanban ↔ Finanças:** `sendTransactionToKanban` cria card ligado; pagar o lançamento conclui o card e concluir o card marca os lançamentos ligados como pagos.
 - **Pipeline:** drag & drop grava posição via `reorderColumnCards`; `quickCreateCard` para adição rápida; card sem data fica sem prazo (`parseOptionalDate`).
-- **Auth:** login simples por variáveis de ambiente `AUTH_EMAIL` / `AUTH_PASSWORD`; sessão em cookie httpOnly `pends_session` (30 dias).
+- **Auth:** login por `AUTH_EMAIL` / `AUTH_PASSWORD`; sessão em cookie httpOnly `pends_session` com token **assinado (HMAC)** por `AUTH_SECRET` (`lib/session.ts`). **Toda Server Action nova deve começar com `await requireAuth();`**. Login tem atraso e bloqueio após 5 erros.
+- **Banco:** use migrations (`prisma/migrations`). Mudou o schema → gere o SQL com `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/N_nome/migration.sql` e aplique com `npm run db:migrate`. Não usar mais `db push`.
+- **Lembretes:** `lib/reminders.ts` monta o resumo diário (contas e pendências de hoje/amanhã/atrasadas); `/api/cron/reminders` (Vercel Cron, 07h BRT, protegido por `CRON_SECRET`); envio via Resend (`RESEND_API_KEY`), sem chave vira log.
+- **Rotinas:** `RecurringTask.kind` = `FINANCE` (conta fixa) ou `TASK` (gera card semanal/mensal, criado por `spawnDueRoutines` ao carregar o board).
+- **Metas:** model `Goal` (alvo, guardado, aporte mensal, prazo); aporte/resgate vira lançamento pago na categoria "Metas".
+- **Outros:** paleta `Ctrl/⌘+K` (`shared/CommandPalette`), importação CSV/OFX (`finances/importParser.ts` + `ImportModal`), backup JSON (`exportBackup`), PWA (`app/manifest.ts`, `public/sw.js`). Variáveis em `.env.example`.
 - Novas lógicas de servidor vão em `app/actions.ts` na seção correspondente; novos componentes na pasta do domínio; tipos novos em `app/types`.
 - Validar com `npx tsc --noEmit` (o `build` roda `prisma generate && next build`).
 
