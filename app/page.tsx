@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Module } from "@prisma/client";
-import { Menu, Search, Globe, Activity, Layout, Wallet } from "lucide-react";
+import { Menu, Search, Globe, Activity, Layout, Wallet, Sun } from "lucide-react";
 
 import { 
   getModules, getBoardData, getDashboardStats,
@@ -20,6 +20,7 @@ import { NeuralView } from "./components/neural/NeuralView";
 import { AnalyticsDash } from "./components/analytics/AnalyticsDash";
 import { KanbanBoard } from "./components/pipeline/KanbanBoard";
 import { FinancesHub } from "./components/finances/FinancesHub";
+import { TodayView } from "./components/today/TodayView";
 
 import { CardDetailModal } from "./components/shared/CardDetailModal";
 import { ModuleModal } from "./components/shared/ModuleModal";
@@ -28,7 +29,7 @@ import { CommandPalette } from "./components/shared/CommandPalette";
 
 export default function PendsApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState<"neural" | "dashboard" | "kanban" | "finances">("neural");
+  const [activeTab, setActiveTab] = useState<"today" | "neural" | "dashboard" | "kanban" | "finances">("today");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [modules, setModules] = useState<Module[]>([]);
@@ -39,6 +40,7 @@ export default function PendsApp() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
   const [financeSnap, setFinanceSnap] = useState<FinanceSnapshot | null>(null);
+  const [dataVersion, setDataVersion] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newTxSignal, setNewTxSignal] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
@@ -58,6 +60,7 @@ export default function PendsApp() {
       setModules(mods);
       if (board?.columns) setColumns(board.columns);
       setStats(dash);
+      setDataVersion((v) => v + 1);
     } catch (err) {
       // Sessão inválida/expirada → volta para o login
       if (!(await checkAuthSession())) setIsAuthenticated(false);
@@ -263,7 +266,7 @@ export default function PendsApp() {
             <Menu size={20} />
           </button>
           <span className="font-bold text-sm uppercase tracking-wider font-mono text-white">
-            {activeTab === "neural" ? "Visão Neural" : activeTab === "dashboard" ? "Analytics" : activeTab === "kanban" ? "Pipeline" : "Finanças & Gastos"}
+            {activeTab === "today" ? "Hoje" : activeTab === "neural" ? "Visão Neural" : activeTab === "dashboard" ? "Analytics" : activeTab === "kanban" ? "Pipeline" : "Finanças & Gastos"}
           </span>
           <button
             onClick={() => setPaletteOpen(true)}
@@ -273,6 +276,22 @@ export default function PendsApp() {
             <Search size={20} />
           </button>
         </div>
+
+        {activeTab === "today" && (
+          <TodayView
+            modules={modules}
+            refreshKey={dataVersion}
+            onOpenCard={(cardId) => setSelectedCardId(cardId)}
+            onNewCard={() => {
+              const first = columns.find((c) => !c.isDone) ?? columns[0];
+              if (!first) return;
+              setCreateTargetColumnId(first.id);
+              setShowCreateCardModal(true);
+            }}
+            onGoTo={(tab) => setActiveTab(tab)}
+            onExternalChange={() => void loadAll()}
+          />
+        )}
 
         {activeTab === "neural" && (
           <NeuralView 
@@ -337,14 +356,15 @@ export default function PendsApp() {
 
       {/* NAVEGAÇÃO INFERIOR (CELULAR) */}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0a0f1d]/95 backdrop-blur border-t border-slate-800 grid grid-cols-4 pb-[env(safe-area-inset-bottom)]"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0a0f1d]/95 backdrop-blur border-t border-slate-800 grid grid-cols-5 pb-[env(safe-area-inset-bottom)]"
         aria-label="Navegação principal"
       >
         {([
-          ["neural", "Neural", <Globe key="n" size={20} />],
-          ["dashboard", "Analytics", <Activity key="d" size={20} />],
+          ["today", "Hoje", <Sun key="t" size={20} />],
           ["kanban", "Pipeline", <Layout key="k" size={20} />],
           ["finances", "Finanças", <Wallet key="f" size={20} />],
+          ["neural", "Neural", <Globe key="n" size={20} />],
+          ["dashboard", "Analytics", <Activity key="d" size={20} />],
         ] as const).map(([tab, label, icon]) => (
           <button
             key={tab}
@@ -352,7 +372,7 @@ export default function PendsApp() {
             onClick={() => setActiveTab(tab)}
             aria-current={activeTab === tab ? "page" : undefined}
             className={`flex flex-col items-center justify-center gap-0.5 h-15 text-[10px] font-bold font-mono cursor-pointer transition-colors ${
-              activeTab === tab ? (tab === "finances" ? "text-emerald-400" : "text-blue-400") : "text-slate-500"
+              activeTab === tab ? (tab === "finances" ? "text-emerald-400" : tab === "today" ? "text-amber-300" : "text-blue-400") : "text-slate-500"
             }`}
           >
             {icon}

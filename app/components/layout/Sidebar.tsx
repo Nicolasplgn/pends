@@ -2,13 +2,13 @@
 
 import type { Module } from "@prisma/client";
 import { 
-  Globe, Activity, Layout, Wallet, 
+  Globe, Activity, Layout, Wallet, Sun, 
   Plus, Pencil, Trash2, LogOut, X, Search
 } from "lucide-react";
 
 interface SidebarProps {
-  activeTab: "neural" | "dashboard" | "kanban" | "finances";
-  setActiveTab: (tab: "neural" | "dashboard" | "kanban" | "finances") => void;
+  activeTab: "today" | "neural" | "dashboard" | "kanban" | "finances";
+  setActiveTab: (tab: "today" | "neural" | "dashboard" | "kanban" | "finances") => void;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
   modules: Module[];
@@ -67,6 +67,15 @@ export function Sidebar({
 
         {/* BOTÕES DE NAVEGAÇÃO PRINCIPAL */}
         <div className="p-4 space-y-1.5 border-b border-slate-800/80 pb-6">
+          <button
+            type="button"
+            onClick={() => { setActiveTab("today"); setMobileMenuOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === "today" ? "bg-amber-500/15 text-amber-300 border border-amber-500/30" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+            }`}
+          >
+            <Sun size={16} className="text-amber-300" /> Hoje
+          </button>
           <button 
             type="button" 
             onClick={() => { setActiveTab("neural"); setMobileMenuOpen(false); }} 

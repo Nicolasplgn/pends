@@ -1384,6 +1384,74 @@ async function payLinkedTransactions(cardId: string) {
   });
 }
 
+// ---------- TELA "HOJE" ----------
+
+/**
+ * Tudo que pede atenção, num lugar só: contas a pagar, entradas a receber e
+ * pendências com prazo — atrasadas, de hoje e dos próximos dias — e o resumo do mês.
+ */
+export async function getTodayOverview() {
+  await requireAuth();
+  await spawnDueRoutines();
+
+  const today = todayMidday();
+  const in30 = new Date(today.getTime() + 30 * 86400000);
+  const in14 = new Date(today.getTime() + 14 * 86400000);
+  const { start, end } = monthRange(today.getUTCFullYear(), today.getUTCMonth());
+
+  const [bills, incomes, cards, monthTxs] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { type: { not: "INCOME" }, paid: false, dueDate: { lte: in30 } },
+      include: txInclude,
+      orderBy: { dueDate: "asc" },
+      take: 200,
+    }),
+    prisma.transaction.findMany({
+      where: { type: "INCOME", paid: false, dueDate: { lte: in30 } },
+      include: txInclude,
+      orderBy: { dueDate: "asc" },
+      take: 100,
+    }),
+    prisma.card.findMany({
+      where: { completed: false, column: { isDone: false }, dueDate: { not: null, lte: in14 } },
+      include: { module: true, column: { select: { title: true } } },
+      orderBy: [{ dueDate: "asc" }, { order: "asc" }],
+      take: 200,
+    }),
+    prisma.transaction.findMany({
+      where: { dueDate: { gte: start, lte: end } },
+      select: { amount: true, type: true, paid: true },
+    }),
+  ]);
+
+  let income = 0, incomeReceived = 0, expense = 0, expensePaid = 0;
+  for (const t of monthTxs) {
+    if (t.type === "INCOME") {
+      income += t.amount;
+      if (t.paid) incomeReceived += t.amount;
+    } else {
+      expense += t.amount;
+      if (t.paid) expensePaid += t.amount;
+    }
+  }
+
+  return {
+    today,
+    bills,
+    incomes,
+    cards,
+    month: {
+      year: today.getUTCFullYear(),
+      month: today.getUTCMonth(),
+      income: round2(income),
+      incomeReceived: round2(incomeReceived),
+      expense: round2(expense),
+      expensePaid: round2(expensePaid),
+      balance: round2(income - expense),
+    },
+  };
+}
+
 // ---------- RESUMO PARA ANALYTICS / NEURAL ----------
 
 /** Recorte leve do financeiro: mês atual + histórico de 6 meses + gasto por módulo. */

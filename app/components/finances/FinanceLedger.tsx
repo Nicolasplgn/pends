@@ -33,6 +33,7 @@ export function FinanceLedger({ transactions, carryOver, handlers, filter, setFi
   const [category, setCategory] = useState("ALL");
   const [sort, setSort] = useState<"date" | "amount">("date");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
 
   const source = useMemo(
     () => (filter === "OVERDUE" || filter === "OPEN" ? [...carryOver, ...transactions] : transactions),
@@ -85,6 +86,7 @@ export function FinanceLedger({ transactions, carryOver, handlers, filter, setFi
   async function bulk(paid: boolean) {
     await onBulkPaid(selectedItems.map((t) => t.id), paid);
     setSelected(new Set());
+    setSelectMode(false);
   }
 
   const allSelected = items.length > 0 && items.every((t) => selected.has(t.id));
@@ -162,23 +164,36 @@ export function FinanceLedger({ transactions, carryOver, handlers, filter, setFi
           <EmptyState>Nenhum lançamento com esses filtros.</EmptyState>
         ) : (
           <>
-            <label className="flex items-center gap-2 px-2.5 text-[10px] text-slate-500 font-mono cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={() => setSelected(allSelected ? new Set() : new Set(items.map((t) => t.id)))}
-                className="accent-blue-500 w-3.5 h-3.5"
-              />
-              selecionar todos ({items.length})
-            </label>
+            <div className="flex items-center justify-between px-2.5 text-[10px] text-slate-500 font-mono">
+              {selectMode ? (
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => setSelected(allSelected ? new Set() : new Set(items.map((t) => t.id)))}
+                    className="accent-blue-500 w-3.5 h-3.5"
+                  />
+                  selecionar todos ({items.length})
+                </label>
+              ) : (
+                <span>toque no círculo para dar baixa · toque na conta para editar</span>
+              )}
+              <button
+                type="button"
+                onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); }}
+                className="text-slate-400 hover:text-white underline underline-offset-2 cursor-pointer"
+              >
+                {selectMode ? "cancelar" : "selecionar vários"}
+              </button>
+            </div>
             <div className="space-y-1">
               {items.map((t) => (
                 <TxRow
                   key={t.id}
                   tx={t}
                   moduleColor={handlers.colorOf(t.category)}
-                  selected={selected.has(t.id)}
-                  onSelect={() => toggleSel(t.id)}
+                  selected={selectMode ? selected.has(t.id) : undefined}
+                  onSelect={selectMode ? () => toggleSel(t.id) : undefined}
                   onToggle={() => handlers.onToggle(t)}
                   onEdit={() => handlers.onEdit(t)}
                   onDelete={() => handlers.onDelete(t)}
