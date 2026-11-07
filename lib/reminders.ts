@@ -40,10 +40,11 @@ export async function buildDailyDigest() {
   ]);
 
   const expenses = txs.filter((t) => t.type !== "INCOME");
-  const incomes = txs.filter((t) => t.type === "INCOME");
+  // Entradas não "atrasam": só avisa as previstas pra hoje/amanhã
+  const incomes = txs.filter((t) => t.type === "INCOME" && dayDiff(t.dueDate) >= 0);
   const toPay = expenses.reduce((s, t) => s + t.amount, 0);
 
-  return { cards, expenses, incomes, toPay, empty: cards.length === 0 && txs.length === 0 };
+  return { cards, expenses, incomes, toPay, empty: cards.length === 0 && expenses.length === 0 && incomes.length === 0 };
 }
 
 export async function sendDailyDigest(opts: { force?: boolean } = {}) {
