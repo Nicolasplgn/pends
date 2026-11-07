@@ -193,7 +193,7 @@ export function FinancesHub({
 
   return (
     <div className="w-full h-full overflow-y-auto [scrollbar-width:thin]">
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-4 pb-28 font-sans">
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 pb-10 md:pb-28 font-sans">
         {/* CABEÇALHO */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -427,6 +427,8 @@ export function FinancesHub({
         initialData={txModal.tx}
         defaults={txModal.defaults}
         modules={modules}
+        onDelete={(tx) => setDeleteTx(tx)}
+        onKanban={(tx) => handlers.onKanban(tx)}
       />
       <ImportModal
         isOpen={importOpen}
@@ -488,7 +490,7 @@ export function FinancesHub({
       />
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-70 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white shadow-2xl font-mono">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-70 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white shadow-2xl font-mono">
           {toast}
         </div>
       )}
@@ -507,7 +509,7 @@ function Kpi({
   onClick?: () => void;
   icon?: React.ReactNode;
 }) {
-  const cls = `text-left p-3.5 sm:p-4 rounded-2xl border border-slate-800 bg-[#0a0f1d] flex flex-col gap-1.5 min-w-0 ${
+  const cls = `text-left p-3 sm:p-4 rounded-2xl border border-slate-800 bg-[#0a0f1d] flex flex-col gap-1.5 min-w-0 ${
     onClick ? "hover:border-slate-600 cursor-pointer transition-colors" : ""
   }`;
   const body = (

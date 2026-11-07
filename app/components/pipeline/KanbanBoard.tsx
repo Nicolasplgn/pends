@@ -529,7 +529,7 @@ export function KanbanBoard({
           onChangeModule={(cardId: string, modId: string) => { void onQuickChangeModule(cardId, modId); }}
         />
       ) : (
-        <div className="flex-1 p-4 sm:p-8 overflow-x-auto flex gap-5 items-start">
+        <div className="flex-1 px-3 py-3 sm:p-8 overflow-x-auto flex gap-3 sm:gap-5 items-start snap-x snap-mandatory sm:snap-none scroll-px-3 overscroll-x-contain">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
@@ -573,7 +573,7 @@ export function KanbanBoard({
                 setEditingColumn(null);
                 setIsColumnModalOpen(true);
               }}
-              className="w-72 shrink-0 border-2 border-dashed border-slate-800 hover:border-blue-500/50 hover:bg-slate-900/30 p-5 rounded-3xl flex items-center justify-center gap-2 text-slate-500 hover:text-blue-400 text-xs font-bold font-mono transition-all cursor-pointer"
+              className="w-[85vw] sm:w-72 snap-center shrink-0 border-2 border-dashed border-slate-800 hover:border-blue-500/50 hover:bg-slate-900/30 p-5 rounded-3xl flex items-center justify-center gap-2 text-slate-500 hover:text-blue-400 text-xs font-bold font-mono transition-all cursor-pointer"
             >
               <Plus size={16} /> NOVA ETAPA
             </button>

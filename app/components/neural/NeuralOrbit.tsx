@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Cpu, Eye, CheckCircle2, Circle, Calendar, Flame, Clock, Layers, ExternalLink } from "lucide-react";
 import type { NeuralNode} from "../../types";
 import { isCardOverdue } from "../../types";
@@ -24,6 +24,20 @@ export function NeuralOrbit({
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [hudTab, setHudTab] = useState<"urgent" | "deadlines" | "all">("urgent");
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // A órbita é desenhada num palco de 720x720 e encolhe para caber na tela (celular)
+  const stageWrapRef = useRef<HTMLDivElement>(null);
+  const [stageScale, setStageScale] = useState(1);
+  useEffect(() => {
+    const el = stageWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setStageScale(Math.min(1, Math.max(0.35, Math.min(width, height) / 720)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Deriva o nó ativo em tempo real a partir do moduleNodes atualizado
   const activeNode = useMemo(() => {
@@ -86,7 +100,7 @@ export function NeuralOrbit({
   }, [activeNode, hudTab]);
 
   return (
-    <div className="flex-1 relative flex items-center justify-center overflow-hidden select-none p-4 sm:p-6">
+    <div ref={stageWrapRef} className="flex-1 relative flex items-center justify-center overflow-hidden select-none p-2 sm:p-6">
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#0b1120_1px,transparent_1px),linear-gradient(to_bottom,#0b1120_1px,transparent_1px)] bg-size-[4rem_4rem] mask-[radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-30 pointer-events-none" />
 
       <div className="absolute top-4 left-6 z-20 hidden sm:block">
@@ -95,7 +109,10 @@ export function NeuralOrbit({
         </p>
       </div>
 
-      <div className="relative w-180 h-180 flex items-center justify-center shrink-0 scale-75 sm:scale-100">
+      <div
+        className="relative w-180 h-180 flex items-center justify-center shrink-0 transition-transform duration-300"
+        style={{ transform: `scale(${stageScale})` }}
+      >
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
           <circle cx="360" cy="360" r="230" fill="none" stroke="#1e293b" strokeWidth="1" strokeDasharray="4 8" className="opacity-60" />
           <circle cx="360" cy="360" r="140" fill="none" stroke="#1e293b" strokeWidth="1" strokeDasharray="2 6" className="opacity-40" />

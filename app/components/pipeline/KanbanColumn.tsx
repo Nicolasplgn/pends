@@ -98,7 +98,7 @@ export function KanbanColumn({
   return (
     <div 
       ref={setNodeRef}
-      className={`w-80 shrink-0 border rounded-3xl flex flex-col max-h-full shadow-2xl transition-all duration-200 ${
+      className={`w-[85vw] max-w-sm sm:w-80 snap-center shrink-0 border rounded-3xl flex flex-col max-h-full shadow-2xl transition-all duration-200 ${
         isOver 
           ? "border-blue-500 bg-[#0f1b35] ring-2 ring-blue-500/40" 
           : isIcebox

@@ -54,11 +54,11 @@ export function ColumnModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
-        className="bg-[#0b101f] border border-blue-900/40 w-full max-w-md rounded-3xl shadow-2xl p-6 text-slate-200"
+        className="bg-[#0b101f] border border-blue-900/40 w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 text-slate-200 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">

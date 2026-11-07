@@ -93,7 +93,7 @@ export function CommandPalette({
   }
 
   return (
-    <div className="fixed inset-0 z-80 flex items-start justify-center bg-black/70 backdrop-blur-sm p-4 pt-[12vh]" onClick={onClose}>
+    <div className="fixed inset-0 z-80 flex items-start justify-center bg-black/70 backdrop-blur-sm p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-4 sm:pt-[12vh]" onClick={onClose}>
       <div className="w-full max-w-xl rounded-2xl border border-slate-700 bg-[#0a0f1d] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 px-4 border-b border-slate-800">
           <Search size={16} className="text-slate-500 shrink-0" />

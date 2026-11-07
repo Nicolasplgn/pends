@@ -70,7 +70,7 @@ export function TxRow({
 
   return (
     <div
-      className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-colors ${
+      className={`group flex items-center gap-2 sm:gap-2.5 px-2 sm:px-2.5 py-2.5 sm:py-2 rounded-xl border transition-colors ${
         selected
           ? "border-blue-500/60 bg-blue-500/5"
           : overdue
@@ -91,7 +91,7 @@ export function TxRow({
       <button
         type="button"
         onClick={onToggle}
-        className="shrink-0 cursor-pointer"
+        className="shrink-0 cursor-pointer p-1 -m-1"
         title={tx.paid ? (income ? "Marcar como não recebido" : "Marcar como não pago") : income ? "Marcar como recebido" : "Marcar como pago"}
       >
         {tx.paid ? (
@@ -152,7 +152,8 @@ export function TxRow({
         </p>
       </div>
 
-      <div className="flex items-center gap-0.5 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+      {/* No celular as ações ficam dentro do modal (toque na linha) */}
+      <div className="hidden sm:flex items-center gap-0.5 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         {!tx.card && (
           <IconBtn title="Criar pendência no Kanban" onClick={onKanban}>
             <Kanban size={13} />
