@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Module } from "@prisma/client";
-import { X, ArrowDownRight, ArrowUpRight, Layers, CheckCircle2, Trash2, Kanban } from "lucide-react";
+import { X, ArrowDownRight, ArrowUpRight, Layers, CheckCircle2, Trash2, Kanban, Clock } from "lucide-react";
 import { createTransaction, updateTransaction, type TxScope } from "@/app/actions";
 import type { FinanceTx, PayMethod, TxType } from "../../../types";
 import { PAY_METHOD_LABEL } from "../../../types";
@@ -39,7 +39,9 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
   const [dueDate, setDueDate] = useState("");
   const [category, setCategory] = useState("");
   const [method, setMethod] = useState<PayMethod>("PIX");
-  const [paid, setPaid] = useState(false);
+  // Status automático: data de hoje/passada = pago; data futura = a pagar.
+  // Só vira manual se a pessoa tocar em "mudar".
+  const [paidOverride, setPaidOverride] = useState<boolean | null>(null);
   const [notes, setNotes] = useState("");
 
   const [isInstallment, setIsInstallment] = useState(false);
@@ -63,7 +65,7 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
       setDueDate(toInputDate(initialData.dueDate));
       setCategory(initialData.category);
       setMethod((initialData.paymentMethod as PayMethod) || "PIX");
-      setPaid(initialData.paid);
+      setPaidOverride(initialData.paid);
       setNotes(initialData.notes ?? "");
       setIsInstallment(initialData.isInstallment);
     } else {
@@ -73,8 +75,7 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
       setDueDate(defaults?.dueDate ?? todayInputDate());
       setCategory(modules[0]?.title ?? "Geral");
       setMethod("PIX");
-      // Entrada nasce como recebida (salário que caiu, pix recebido…); conta nasce em aberto
-      setPaid((defaults?.type ?? "EXPENSE") === "INCOME");
+      setPaidOverride(null);
       setNotes("");
       setIsInstallment(false);
       setInstallments(10);
@@ -91,6 +92,8 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
+  const autoPaid = !!dueDate && dueDate <= todayInputDate();
+  const paid = paidOverride ?? autoPaid;
   const parsedAmount = parseMoney(amount);
   const preview = useMemo(() => {
     if (!isInstallment || isEdit || !(parsedAmount > 0) || installments < 2) return null;
@@ -165,7 +168,6 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
                 type="button"
                 onClick={() => {
                   setType(t);
-                  if (!isEdit) setPaid(t === "INCOME");
                 }}
                 className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-bold font-mono transition cursor-pointer ${
                   type === t
@@ -359,13 +361,26 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
             />
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300 select-none">
-            <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="accent-emerald-500" />
-            <CheckCircle2 size={14} className={paid ? "text-emerald-400" : "text-slate-600"} />
-            {type === "INCOME" ? "Já recebido" : "Já pago"}
-            {type === "INCOME" && !isEdit && <span className="text-slate-500">(desmarque se ainda vai cair)</span>}
-            {isInstallment && !isEdit && <span className="text-slate-500">(só a primeira parcela)</span>}
-          </label>
+          <div
+            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-xs ${
+              paid ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300" : "border-amber-500/30 bg-amber-500/5 text-amber-300"
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              {paid ? <CheckCircle2 size={15} /> : <Clock size={15} />}
+              {paid
+                ? type === "INCOME" ? "Entra como recebido" : "Entra como pago"
+                : type === "INCOME" ? "Entra como a receber" : "Entra como a pagar"}
+              {isInstallment && !isEdit && <span className="text-slate-500">(1ª parcela)</span>}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPaidOverride(!paid)}
+              className="text-[11px] font-mono text-slate-400 hover:text-white underline underline-offset-2 cursor-pointer"
+            >
+              {paid ? (type === "INCOME" ? "ainda não caiu" : "ainda não paguei") : type === "INCOME" ? "já caiu" : "já paguei"}
+            </button>
+          </div>
 
           {error && <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">{error}</p>}
 
