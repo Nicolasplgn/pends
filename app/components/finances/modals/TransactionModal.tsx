@@ -71,7 +71,8 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
       setDueDate(defaults?.dueDate ?? todayInputDate());
       setCategory(modules[0]?.title ?? "Geral");
       setMethod("PIX");
-      setPaid(false);
+      // Entrada nasce como recebida (salário que caiu, pix recebido…); conta nasce em aberto
+      setPaid((defaults?.type ?? "EXPENSE") === "INCOME");
       setNotes("");
       setIsInstallment(false);
       setInstallments(10);
@@ -160,7 +161,10 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
               <button
                 key={t}
                 type="button"
-                onClick={() => setType(t)}
+                onClick={() => {
+                  setType(t);
+                  if (!isEdit) setPaid(t === "INCOME");
+                }}
                 className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-bold font-mono transition cursor-pointer ${
                   type === t
                     ? t === "INCOME"
@@ -357,6 +361,7 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
             <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="accent-emerald-500" />
             <CheckCircle2 size={14} className={paid ? "text-emerald-400" : "text-slate-600"} />
             {type === "INCOME" ? "Já recebido" : "Já pago"}
+            {type === "INCOME" && !isEdit && <span className="text-slate-500">(desmarque se ainda vai cair)</span>}
             {isInstallment && !isEdit && <span className="text-slate-500">(só a primeira parcela)</span>}
           </label>
 

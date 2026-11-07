@@ -11,7 +11,7 @@ export type LedgerFilter = "ALL" | "OPEN" | "PAID" | "OVERDUE" | "INCOME" | "EXP
 
 const FILTERS: [LedgerFilter, string][] = [
   ["ALL", "Tudo"],
-  ["OPEN", "Em aberto"],
+  ["OPEN", "A pagar"],
   ["OVERDUE", "Atrasados"],
   ["PAID", "Pagos"],
   ["EXPENSE", "Saídas"],
@@ -47,9 +47,9 @@ export function FinanceLedger({ transactions, carryOver, handlers, filter, setFi
       if (q && !t.description.toLowerCase().includes(q) && !t.category.toLowerCase().includes(q) && !(t.notes ?? "").toLowerCase().includes(q)) return false;
       if (category !== "ALL" && t.category !== category) return false;
       switch (filter) {
-        case "OPEN": return !t.paid;
+        case "OPEN": return !t.paid && t.type !== "INCOME";
         case "PAID": return t.paid;
-        case "OVERDUE": return !t.paid && daysUntil(t.dueDate) < 0;
+        case "OVERDUE": return !t.paid && t.type !== "INCOME" && daysUntil(t.dueDate) < 0;
         case "INCOME": return t.type === "INCOME";
         case "EXPENSE": return t.type !== "INCOME";
         case "CARD": return t.paymentMethod === "CREDIT_CARD";

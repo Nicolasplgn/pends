@@ -813,7 +813,7 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
     // Pendências esquecidas de meses anteriores (só interessam do mês atual pra frente)
     year * 12 + month >= now.getFullYear() * 12 + now.getMonth()
       ? prisma.transaction.findMany({
-          where: { paid: false, dueDate: { lt: start } },
+          where: { paid: false, type: { not: "INCOME" }, dueDate: { lt: start } },
           include: txInclude,
           orderBy: { dueDate: "asc" },
           take: 100,

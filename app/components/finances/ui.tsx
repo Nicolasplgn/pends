@@ -64,8 +64,9 @@ export function TxRow({
 }: TxRowProps) {
   const income = tx.type === "INCOME";
   const diff = daysUntil(tx.dueDate);
-  const overdue = !tx.paid && diff < 0;
-  const soon = !tx.paid && diff >= 0 && diff <= 3;
+  // Entrada não "atrasa": só conta pagar tem alerta de vencimento
+  const overdue = !income && !tx.paid && diff < 0;
+  const soon = !income && !tx.paid && diff >= 0 && diff <= 3;
 
   return (
     <div
@@ -96,14 +97,14 @@ export function TxRow({
         {tx.paid ? (
           <CheckCircle2 size={18} className="text-emerald-400" />
         ) : (
-          <Circle size={18} className={overdue ? "text-rose-400" : "text-slate-600 hover:text-emerald-400"} />
+          <Circle size={18} className={overdue ? "text-rose-400" : income ? "text-emerald-700 hover:text-emerald-400" : "text-slate-600 hover:text-emerald-400"} />
         )}
       </button>
 
       <span className="w-1 self-stretch rounded-full shrink-0" style={{ backgroundColor: moduleColor }} />
 
       <div className="flex-1 min-w-0" onClick={onEdit} role="button">
-        <p className={`text-[13px] font-semibold truncate cursor-pointer ${tx.paid ? "text-slate-500 line-through" : "text-slate-100"}`}>
+        <p className={`text-[13px] font-semibold truncate cursor-pointer ${tx.paid && !income ? "text-slate-500 line-through" : "text-slate-100"}`}>
           {tx.description}
         </p>
         <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[10px] font-mono text-slate-500">
@@ -143,7 +144,11 @@ export function TxRow({
             tx.paid ? "text-emerald-600" : overdue ? "text-rose-400 font-bold" : soon ? "text-amber-400" : "text-slate-500"
           }`}
         >
-          {tx.paid ? `${income ? "recebido" : "pago"} · ${fmtDate(tx.dueDate, showYear)}` : `${fmtDate(tx.dueDate, showYear)} · ${dueLabel(tx.dueDate)}`}
+          {income
+            ? `${tx.paid ? "recebido" : "previsto"} · ${fmtDate(tx.dueDate, showYear)}`
+            : tx.paid
+              ? `pago · ${fmtDate(tx.dueDate, showYear)}`
+              : `${fmtDate(tx.dueDate, showYear)} · ${dueLabel(tx.dueDate)}`}
         </p>
       </div>
 

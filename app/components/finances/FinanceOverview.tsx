@@ -31,13 +31,16 @@ export function FinanceOverview({ data, handlers, onSetBudget, onPayCreditCard, 
   const [showDone, setShowDone] = useState(false);
 
   // ---------- AGENDA ----------
+  // Entradas ficam num bloco próprio: não "vencem" nem entram em atrasadas.
   const agenda = useMemo(() => {
-    const overdue: FinanceTx[] = [...data.carryOver];
+    const incomes: FinanceTx[] = [];
+    const overdue: FinanceTx[] = data.carryOver.filter((t) => t.type !== "INCOME");
     const week: FinanceTx[] = [];
     const later: FinanceTx[] = [];
     const done: FinanceTx[] = [];
     for (const t of data.transactions) {
-      if (t.paid) done.push(t);
+      if (t.type === "INCOME") incomes.push(t);
+      else if (t.paid) done.push(t);
       else {
         const d = daysUntil(t.dueDate);
         if (d < 0) overdue.push(t);
@@ -45,8 +48,11 @@ export function FinanceOverview({ data, handlers, onSetBudget, onPayCreditCard, 
         else later.push(t);
       }
     }
-    return { overdue, week, later, done };
+    return { incomes, overdue, week, later, done };
   }, [data]);
+
+  const incomeReceived = agenda.incomes.filter((t) => t.paid).reduce((s, t) => s + t.amount, 0);
+  const incomeExpected = agenda.incomes.reduce((s, t) => s + t.amount, 0);
 
   const sum = (list: FinanceTx[]) =>
     list.reduce((s, t) => s + (t.type === "INCOME" ? t.amount : -t.amount), 0);
@@ -96,7 +102,20 @@ export function FinanceOverview({ data, handlers, onSetBudget, onPayCreditCard, 
           </EmptyState>
         ) : (
           <div className="space-y-3">
-            {group("Atrasadas / não recebidas", agenda.overdue, "text-rose-400")}
+            {agenda.incomes.length > 0 && (
+              <div className="space-y-1 pb-2 border-b border-slate-800/80">
+                <div className="flex items-center justify-between px-2.5 pt-1 text-[10px] font-bold uppercase tracking-wider font-mono text-emerald-400">
+                  <span>Entradas · {agenda.incomes.length}</span>
+                  <span>
+                    {incomeReceived < incomeExpected
+                      ? `${brl(incomeReceived)} de ${brl(incomeExpected)} recebido`
+                      : `${brl(incomeExpected)} recebido`}
+                  </span>
+                </div>
+                {agenda.incomes.map(row)}
+              </div>
+            )}
+            {group("Contas atrasadas", agenda.overdue, "text-rose-400")}
             {group("Próximos 7 dias", agenda.week, "text-amber-400")}
             {group("Mais pra frente", agenda.later, "text-slate-400")}
             {agenda.done.length > 0 && (
@@ -107,7 +126,7 @@ export function FinanceOverview({ data, handlers, onSetBudget, onPayCreditCard, 
                   className="w-full flex items-center justify-between px-2.5 pt-2 text-[10px] font-bold uppercase tracking-wider font-mono text-emerald-500 cursor-pointer"
                 >
                   <span className="flex items-center gap-1">
-                    {showDone ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Pagos / recebidos · {agenda.done.length}
+                    {showDone ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Contas pagas · {agenda.done.length}
                   </span>
                   <span>{brl(Math.abs(sum(agenda.done)))}</span>
                 </button>
