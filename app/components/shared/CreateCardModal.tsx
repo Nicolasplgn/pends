@@ -59,11 +59,11 @@ export function CreateCardModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4"
       onClick={onClose}
     >
       <div 
-        className="bg-[#0f172a] border border-slate-800 p-6 rounded-3xl w-full max-w-lg shadow-2xl text-slate-200"
+        className="bg-[#0f172a] border border-slate-800 p-5 sm:p-6 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] overflow-y-auto shadow-2xl text-slate-200 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-base font-bold text-white mb-4 uppercase tracking-wider font-mono">Nova Pendência</h3>

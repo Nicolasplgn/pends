@@ -24,3 +24,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Celular: campos com 16px evitam o zoom automático do iOS ao focar */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Toque: sem destaque azul padrão e sem "pull to refresh" acidental no quadro */
+html {
+  -webkit-tap-highlight-color: transparent;
+}

@@ -26,7 +26,10 @@ export function NeuralView({
   onCardClick,
   moduleSpend,
 }: NeuralViewProps) {
-  const [viewMode, setViewMode] = useState<"orbit" | "grid">("orbit");
+  // No celular abre na lista de módulos (melhor para toque); no desktop, na órbita
+  const [viewMode, setViewMode] = useState<"orbit" | "grid">(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches ? "grid" : "orbit"
+  );
   const [selectedModule, setSelectedModule] = useState<NeuralNode | null>(null);
 
   const moduleCardsMap = useMemo(() => {

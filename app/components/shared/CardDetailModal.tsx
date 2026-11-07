@@ -99,11 +99,11 @@ export function CardDetailModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4"
       onClick={onClose}
     >
       <div 
-        className="bg-[#0f172a] border border-slate-800 w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-200"
+        className="bg-[#0f172a] border border-slate-800 w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden text-slate-200 pb-[env(safe-area-inset-bottom)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b border-slate-800/80 flex items-center justify-between bg-[#0a0f1d]">

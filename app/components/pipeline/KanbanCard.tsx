@@ -54,7 +54,7 @@ export function KanbanCard({
         onClick={() => {
           if (!isDragging && onClick) onClick();
         }}
-        className={`px-3 py-2 mb-1.5 rounded-xl border cursor-grab hover:shadow-lg transition-all flex items-center justify-between gap-2 select-none group ${
+        className={`px-3 py-2.5 sm:py-2 mb-1.5 rounded-xl border cursor-grab hover:shadow-lg transition-all flex items-center justify-between gap-2 select-none group ${
           card.completed 
             ? "bg-[#0b1424]/70 border-emerald-500/30 opacity-70" 
             : overdue
@@ -110,7 +110,7 @@ export function KanbanCard({
                 e.stopPropagation();
                 onNextStage();
               }}
-              className="text-slate-500 hover:text-blue-400 p-0.5 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+              className="text-slate-500 hover:text-blue-400 p-1.5 -m-1 rounded cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
               title="Avançar etapa"
             >
               <ChevronRight size={13} />

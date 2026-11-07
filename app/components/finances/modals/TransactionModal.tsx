@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Module } from "@prisma/client";
-import { X, ArrowDownRight, ArrowUpRight, Layers, CheckCircle2 } from "lucide-react";
+import { X, ArrowDownRight, ArrowUpRight, Layers, CheckCircle2, Trash2, Kanban } from "lucide-react";
 import { createTransaction, updateTransaction, type TxScope } from "@/app/actions";
 import type { FinanceTx, PayMethod, TxType } from "../../../types";
 import { PAY_METHOD_LABEL } from "../../../types";
@@ -21,6 +21,8 @@ interface TransactionModalProps {
   initialData?: FinanceTx | null;
   defaults?: TxModalDefaults;
   modules: Module[];
+  onDelete?: (tx: FinanceTx) => void;
+  onKanban?: (tx: FinanceTx) => void;
 }
 
 const METHODS: PayMethod[] = ["PIX", "BOLETO", "CREDIT_CARD", "DEBIT"];
@@ -29,7 +31,7 @@ const inputCls =
   "w-full bg-[#050811] border border-slate-800 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500 transition-colors";
 const labelCls = "text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1";
 
-export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaults, modules }: TransactionModalProps) {
+export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaults, modules, onDelete, onKanban }: TransactionModalProps) {
   const isEdit = !!initialData;
   const [type, setType] = useState<TxType>("EXPENSE");
   const [description, setDescription] = useState("");
@@ -367,7 +369,29 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
 
           {error && <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">{error}</p>}
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+            {isEdit && onDelete && (
+              <button
+                type="button"
+                onClick={() => { onClose(); onDelete(initialData!); }}
+                className="mr-auto p-2 rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                title="Excluir lançamento"
+                aria-label="Excluir lançamento"
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
+            {isEdit && onKanban && !initialData?.card && (
+              <button
+                type="button"
+                onClick={() => { onClose(); onKanban(initialData!); }}
+                className={`${onDelete ? "" : "mr-auto "}p-2 rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 cursor-pointer`}
+                title="Criar pendência no Pipeline"
+                aria-label="Criar pendência no Pipeline"
+              >
+                <Kanban size={15} />
+              </button>
+            )}
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-800 text-xs text-slate-400 hover:text-white cursor-pointer">
               Cancelar
             </button>

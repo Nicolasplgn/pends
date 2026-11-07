@@ -210,7 +210,7 @@ export function AnalyticsDash({
   };
 
   return (
-    <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto space-y-6 bg-[#050811] text-slate-200">
+    <div className="flex-1 p-3 sm:p-6 lg:p-8 overflow-y-auto space-y-4 sm:space-y-6 bg-[#050811] text-slate-200">
       
       {/* MODAL DE RELATÓRIO EXECUTIVO OFICIAL */}
       <ExecutiveReportModal
@@ -264,10 +264,10 @@ export function AnalyticsDash({
       </div>
 
       {/* BLOCO 1: SUPER KPIS DE SAÚDE DO NEGÓCIO */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         
         {/* HEALTH SCORE */}
-        <div className="bg-[#0b101f] p-5 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="bg-[#0b101f] p-4 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all min-w-0">
           <div className={`absolute -right-10 -top-10 w-32 h-32 rounded-full blur-3xl opacity-20 ${healthScore >= 75 ? "bg-emerald-500" : healthScore >= 50 ? "bg-amber-500" : "bg-red-500"}`} />
           <div className="flex justify-between items-start mb-2 relative z-10">
             <span className="text-[11px] font-mono uppercase text-slate-400">Saúde do Sistema</span>
@@ -279,7 +279,7 @@ export function AnalyticsDash({
             </div>
           </div>
           <div className="flex items-baseline gap-2 relative z-10">
-            <span className={`text-4xl font-mono font-black ${
+            <span className={`text-3xl sm:text-4xl font-mono font-black ${
               healthScore >= 75 ? "text-emerald-400" : healthScore >= 50 ? "text-amber-400" : "text-red-400"
             }`}>
               {healthScore}
@@ -291,28 +291,28 @@ export function AnalyticsDash({
         </div>
 
         {/* TAXA DE ENTREGA */}
-        <div className="bg-[#0b101f] p-5 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="bg-[#0b101f] p-4 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all min-w-0">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[11px] font-mono uppercase text-slate-400">Taxa de Conversão</span>
             <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center">
               <TrendingUp size={16} />
             </div>
           </div>
-          <div className="text-4xl font-mono font-black text-white">{stats.completionRate}%</div>
+          <div className="text-3xl sm:text-4xl font-mono font-black text-white">{stats.completionRate}%</div>
           <div className="text-[10px] text-slate-400 mt-1 font-mono uppercase tracking-wider">
             {stats.completed} de {stats.total} tarefas
           </div>
         </div>
 
         {/* WORK IN PROGRESS */}
-        <div className="bg-[#0b101f] p-5 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="bg-[#0b101f] p-4 sm:p-6 rounded-3xl border border-slate-800/90 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all min-w-0">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[11px] font-mono uppercase text-cyan-400 font-bold">WIP Ativo</span>
             <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center">
               <Zap size={16} />
             </div>
           </div>
-          <div className="text-4xl font-mono font-black text-cyan-400">{activeWIP}</div>
+          <div className="text-3xl sm:text-4xl font-mono font-black text-cyan-400">{activeWIP}</div>
           <div className="text-[10px] text-slate-400 mt-1 font-mono uppercase tracking-wider">
             Excluindo fila de espera (gelo)
           </div>
@@ -326,7 +326,7 @@ export function AnalyticsDash({
               <AlertTriangle size={16} />
             </div>
           </div>
-          <div className={`text-4xl font-mono font-black ${stats.overdue + stats.urgent > 0 ? "text-red-400 animate-pulse" : "text-slate-500"}`}>
+          <div className={`text-3xl sm:text-4xl font-mono font-black ${stats.overdue + stats.urgent > 0 ? "text-red-400 animate-pulse" : "text-slate-500"}`}>
             {stats.overdue + stats.urgent}
           </div>
           <div className="text-[10px] text-slate-400 mt-1 font-mono uppercase tracking-wider">

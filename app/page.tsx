@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Module } from "@prisma/client";
-import { Menu } from "lucide-react";
+import { Menu, Search, Globe, Activity, Layout, Wallet } from "lucide-react";
 
 import { 
   getModules, getBoardData, getDashboardStats,
@@ -183,7 +183,7 @@ export default function PendsApp() {
   if (!isAuthenticated) return <LoginScreen onLogin={() => { setIsAuthenticated(true); void loadAll(); }} />;
 
   return (
-    <div className="h-screen bg-[#050811] flex overflow-hidden font-sans text-slate-300">
+    <div className="h-dvh bg-[#050811] flex overflow-hidden font-sans text-slate-300">
       
       <CardDetailModal 
         cardId={selectedCardId} 
@@ -238,7 +238,7 @@ export default function PendsApp() {
       />}
 
       {flash && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-90 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white shadow-2xl font-mono">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-90 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white shadow-2xl font-mono">
           {flash}
         </div>
       )}
@@ -257,15 +257,21 @@ export default function PendsApp() {
         onOpenPalette={() => setPaletteOpen(true)}
       />
 
-      <main className="flex-1 flex flex-col overflow-hidden bg-[#050811] relative">
-        <div className="md:hidden flex items-center justify-between p-4 bg-[#0a0f1d] border-b border-slate-800 z-30 shrink-0">
-          <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-300 hover:text-white">
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#050811] relative pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0">
+        <div className="md:hidden flex items-center justify-between px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] bg-[#0a0f1d] border-b border-slate-800 z-30 shrink-0">
+          <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-300 hover:text-white" aria-label="Abrir menu de módulos">
             <Menu size={20} />
           </button>
           <span className="font-bold text-sm uppercase tracking-wider font-mono text-white">
             {activeTab === "neural" ? "Visão Neural" : activeTab === "dashboard" ? "Analytics" : activeTab === "kanban" ? "Pipeline" : "Finanças & Gastos"}
           </span>
-          <div className="w-8" />
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-300 hover:text-white"
+            aria-label="Buscar pendência ou ação"
+          >
+            <Search size={20} />
+          </button>
         </div>
 
         {activeTab === "neural" && (
@@ -328,6 +334,32 @@ export default function PendsApp() {
           />
         )}
       </main>
+
+      {/* NAVEGAÇÃO INFERIOR (CELULAR) */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0a0f1d]/95 backdrop-blur border-t border-slate-800 grid grid-cols-4 pb-[env(safe-area-inset-bottom)]"
+        aria-label="Navegação principal"
+      >
+        {([
+          ["neural", "Neural", <Globe key="n" size={20} />],
+          ["dashboard", "Analytics", <Activity key="d" size={20} />],
+          ["kanban", "Pipeline", <Layout key="k" size={20} />],
+          ["finances", "Finanças", <Wallet key="f" size={20} />],
+        ] as const).map(([tab, label, icon]) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            aria-current={activeTab === tab ? "page" : undefined}
+            className={`flex flex-col items-center justify-center gap-0.5 h-15 text-[10px] font-bold font-mono cursor-pointer transition-colors ${
+              activeTab === tab ? (tab === "finances" ? "text-emerald-400" : "text-blue-400") : "text-slate-500"
+            }`}
+          >
+            {icon}
+            {label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

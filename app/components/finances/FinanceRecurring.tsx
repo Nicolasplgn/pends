@@ -108,7 +108,7 @@ export function FinanceRecurring({ recurring, month, onCreate, onEdit, onDelete,
                   )}
                 </div>
 
-                <div className="flex items-center shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity -mr-1">
                   <IconBtn title={r.active ? "Pausar" : "Reativar"} onClick={() => onToggleActive(r)}>
                     <Power size={13} />
                   </IconBtn>
