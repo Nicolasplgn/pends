@@ -211,6 +211,7 @@ export async function getBoardData() {
   await requireAuth();
   try {
     await spawnDueRoutines();
+    await runMaintenance();
     let board = await prisma.board.findFirst({
       include: boardInclude
     });
@@ -517,6 +518,183 @@ export async function addComment(cardId: string, text: string) {
     data: { text, cardId, user: CURRENT_USER }
   });
   revalidatePath("/");
+}
+
+// ==========================================
+// 5b. RESPONSÁVEL & ARQUIVO COMPACTO
+// ==========================================
+
+/** Nomes já usados como responsável (para sugerir no campo). */
+export async function getAssignees() {
+  await requireAuth();
+  const [a, b] = await Promise.all([
+    prisma.card.findMany({ where: { assignee: { not: null } }, distinct: ["assignee"], select: { assignee: true } }),
+    prisma.cardArchive.findMany({ where: { assignee: { not: null } }, distinct: ["assignee"], select: { assignee: true } }),
+  ]);
+  return [...new Set([...a, ...b].map((x) => x.assignee!).filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
+}
+
+export async function updateCardAssignee(cardId: string, assignee: string | null) {
+  await requireAuth();
+  const clean = assignee?.trim() || null;
+  const card = await prisma.card.findUnique({ where: { id: cardId }, select: { assignee: true } });
+  if (!card || card.assignee === clean) return;
+  await prisma.card.update({
+    where: { id: cardId },
+    data: {
+      assignee: clean,
+      history: {
+        create: { action: "Responsável", details: clean ? `Passou para ${clean}` : "Voltou para mim", user: CURRENT_USER },
+      },
+    },
+  });
+  revalidatePath("/");
+}
+
+/** Schema do Postgres vindo do ?schema= da DATABASE_URL (só letras, números e _). */
+function dbSchema() {
+  try {
+    const name = new URL(process.env.DATABASE_URL ?? "").searchParams.get("schema") ?? "public";
+    return /^\w+$/.test(name) ? name : "public";
+  } catch {
+    return "public";
+  }
+}
+
+const ARCHIVE_AFTER_DAYS = 14;
+const HISTORY_KEEP_PER_CARD = 15;
+let lastMaintenance = 0;
+
+/**
+ * Faxina barata, no máximo a cada 6 h por servidor:
+ * arquiva concluídos antigos e poda o histórico de movimentos.
+ */
+async function runMaintenance() {
+  if (Date.now() - lastMaintenance < 6 * 3600_000) return;
+  lastMaintenance = Date.now();
+  try {
+    await archiveCards(ARCHIVE_AFTER_DAYS);
+    // Schema explícito: em conexão com pooler o search_path nem sempre é o do ?schema=
+    const schema = dbSchema();
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "${schema}"."History" h
+       USING (
+         SELECT id, row_number() OVER (PARTITION BY "cardId" ORDER BY "timestamp" DESC) AS rn
+         FROM "${schema}"."History"
+       ) x
+       WHERE h.id = x.id AND x.rn > $1`,
+      HISTORY_KEEP_PER_CARD
+    );
+  } catch (e) {
+    console.error("Erro na manutenção:", e);
+  }
+}
+
+/** Move concluídos para o arquivo (uma linha por card) e apaga o card + histórico. */
+async function archiveCards(minAgeDays: number) {
+  const cutoff = new Date(Date.now() - minAgeDays * 86400000);
+  const cards = await prisma.card.findMany({
+    where: {
+      AND: [
+        { OR: [{ completed: true }, { column: { isDone: true } }] },
+        { OR: [{ completedAt: { lte: cutoff } }, { completedAt: null, updatedAt: { lte: cutoff } }] },
+      ],
+    },
+    include: { module: true, comments: { orderBy: { createdAt: "asc" } } },
+  });
+  if (cards.length === 0) return 0;
+
+  const fmt = (d: Date) => d.toLocaleDateString("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit" });
+  const rows = cards.map((c) => {
+    const parts = [c.description?.trim(), ...c.comments.map((m) => `${fmt(m.createdAt)}: ${m.text.trim()}`)].filter(Boolean);
+    const notes = parts.join("\n").slice(0, 1500) || null;
+    return {
+      id: c.id,
+      title: c.title,
+      moduleTitle: c.module?.title ?? null,
+      moduleColor: c.module?.color ?? null,
+      assignee: c.assignee,
+      priority: c.priority,
+      dueDate: c.dueDate,
+      createdAt: c.createdAt,
+      completedAt: c.completedAt ?? c.updatedAt,
+      notes,
+    };
+  });
+
+  const ids = cards.map((c) => c.id);
+  await prisma.$transaction([
+    prisma.cardArchive.createMany({ data: rows, skipDuplicates: true }),
+    prisma.transaction.updateMany({ where: { cardId: { in: ids } }, data: { cardId: null } }),
+    prisma.card.deleteMany({ where: { id: { in: ids } } }), // histórico e comentários saem em cascata
+  ]);
+  return cards.length;
+}
+
+/** Botão "Arquivar concluídos": arquiva todos os concluídos agora (qualquer idade). */
+export async function archiveDoneCardsNow() {
+  await requireAuth();
+  const n = await archiveCards(0);
+  revalidatePath("/");
+  return { archived: n };
+}
+
+export async function getArchivedCards(query?: string) {
+  await requireAuth();
+  const q = query?.trim();
+  const [items, total] = await Promise.all([
+    prisma.cardArchive.findMany({
+      where: q
+        ? {
+            OR: [
+              { title: { contains: q, mode: "insensitive" } },
+              { notes: { contains: q, mode: "insensitive" } },
+              { assignee: { contains: q, mode: "insensitive" } },
+              { moduleTitle: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : undefined,
+      orderBy: { archivedAt: "desc" },
+      take: 200,
+    }),
+    prisma.cardArchive.count(),
+  ]);
+  return { items, total };
+}
+
+/** Traz de volta para a etapa final do quadro (como concluído). */
+export async function restoreArchivedCard(id: string) {
+  await requireAuth();
+  const a = await prisma.cardArchive.findUnique({ where: { id } });
+  if (!a) return { success: false };
+  const doneCol =
+    (await prisma.column.findFirst({ where: { isDone: true }, orderBy: { order: "asc" } })) ??
+    (await prisma.column.findFirst({ orderBy: { order: "asc" } }));
+  if (!doneCol) return { success: false };
+  const mod = a.moduleTitle ? await prisma.module.findFirst({ where: { title: a.moduleTitle } }) : null;
+  const count = await prisma.card.count({ where: { columnId: doneCol.id } });
+  await prisma.$transaction([
+    prisma.card.create({
+      data: {
+        id: a.id,
+        title: a.title,
+        description: a.notes,
+        priority: a.priority,
+        dueDate: a.dueDate,
+        assignee: a.assignee,
+        moduleId: mod?.id ?? null,
+        columnId: doneCol.id,
+        order: count,
+        completed: doneCol.isDone,
+        completedAt: a.completedAt,
+        createdAt: a.createdAt,
+        history: { create: { action: "Sistema", details: "Restaurado do arquivo", user: CURRENT_USER } },
+      },
+    }),
+    prisma.cardArchive.delete({ where: { id } }),
+  ]);
+  revalidatePath("/");
+  return { success: true };
 }
 
 // ==========================================

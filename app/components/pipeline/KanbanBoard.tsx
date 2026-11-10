@@ -9,7 +9,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { 
   ChevronLeft, ChevronRight, Filter, Plus, Search, 
-  Flame, Clock, LayoutGrid, Rows3, Table, Snowflake, Repeat
+  Flame, Clock, LayoutGrid, Rows3, Table, Snowflake, Repeat, Users
 } from "lucide-react";
 import type { KanbanColumn as KanbanColumnType, KanbanCardData } from "../../types";
 import { MONTH_NAMES, isCardOverdue } from "../../types";
@@ -18,7 +18,9 @@ import { KanbanTableView } from "./KanbanTableView";
 import { ColumnModal } from "../shared/ColumnModal";
 import { ConfirmModal } from "../shared/ConfirmModal";
 import { RoutinesModal } from "./RoutinesModal";
-import { moveCard, createColumn, updateColumn, deleteColumn, moveColumn, reorderColumnCards, quickCreateCard } from "../../actions";
+import { PeopleModal } from "./PeopleModal";
+import { ArchiveModal } from "./ArchiveModal";
+import { moveCard, createColumn, updateColumn, deleteColumn, moveColumn, reorderColumnCards, quickCreateCard, archiveDoneCardsNow } from "../../actions";
 
 interface KanbanBoardProps {
   columns: KanbanColumnType[];
@@ -92,6 +94,16 @@ export function KanbanBoard({
   const [editingColumn, setEditingColumn] = useState<KanbanColumnType | null>(null);
   const [deleteTargetColumnId, setDeleteTargetColumnId] = useState<string | null>(null);
   const [routinesOpen, setRoutinesOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  // "all" = todos · "__me" = comigo · nome = com essa pessoa
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+
+  const assigneeNames = useMemo(
+    () => [...new Set(columns.flatMap((c) => c.cards.map((k) => k.assignee).filter(Boolean) as string[]))].sort(),
+    [columns]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -124,6 +136,9 @@ export function KanbanBoard({
   const isCardMatchingFilters = (card: KanbanCardData) => {
     const matchesModule = activeModuleFilter === "all" || card.moduleId === activeModuleFilter;
     if (!matchesModule) return false;
+
+    if (assigneeFilter === "__me" && card.assignee) return false;
+    if (assigneeFilter !== "all" && assigneeFilter !== "__me" && card.assignee !== assigneeFilter) return false;
 
     if (kanbanMonthFilter === "month") {
       if (!card.dueDate) return true;
@@ -308,6 +323,27 @@ export function KanbanBoard({
         onSave={handleSaveColumn}
       />
 
+      <PeopleModal
+        isOpen={peopleOpen}
+        onClose={() => setPeopleOpen(false)}
+        columns={columns}
+        onCardClick={onCardClick}
+        onFilter={(who) => setAssigneeFilter(who)}
+      />
+      <ArchiveModal isOpen={archiveOpen} onClose={() => setArchiveOpen(false)} onRestored={() => void onReload()} />
+      <ConfirmModal
+        isOpen={confirmArchive}
+        onClose={() => setConfirmArchive(false)}
+        title="Arquivar os concluídos?"
+        description="Os cards da etapa final saem do quadro e viram uma linha compacta no arquivo (título, módulo, responsável, datas e anotações). O histórico de movimentos é apagado. Dá pra buscar e restaurar depois."
+        confirmText="Arquivar"
+        onConfirm={async () => {
+          await archiveDoneCardsNow();
+          setConfirmArchive(false);
+          await onReload();
+        }}
+      />
+
       <RoutinesModal
         isOpen={routinesOpen}
         onClose={() => setRoutinesOpen(false)}
@@ -460,6 +496,29 @@ export function KanbanBoard({
             )}
           </div>
 
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPeopleOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0b101f] border border-slate-800 text-xs font-mono text-slate-400 hover:text-violet-300 hover:border-violet-500/40 cursor-pointer transition-colors"
+              title="Com quem está cada pendência"
+            >
+              <Users size={13} /> <span className="hidden sm:inline">Pessoas</span>
+            </button>
+            <select
+              value={assigneeFilter}
+              onChange={(e) => setAssigneeFilter(e.target.value)}
+              className={`bg-[#0b101f] border rounded-xl px-2 py-1.5 text-xs font-mono outline-none cursor-pointer ${
+                assigneeFilter === "all" ? "border-slate-800 text-slate-400" : "border-violet-500/50 text-violet-200"
+              }`}
+              aria-label="Filtrar por responsável"
+            >
+              <option value="all">Todos</option>
+              <option value="__me">Comigo</option>
+              {assigneeNames.map((n) => <option key={n} value={n}>Com {n}</option>)}
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={() => setRoutinesOpen(true)}
@@ -557,6 +616,8 @@ export function KanbanBoard({
                     setDeleteTargetColumnId(col.id);
                   }}
                   onAddCard={() => onOpenCreateInColumn(col.id)}
+                  onArchiveDone={col.isDone ? () => setConfirmArchive(true) : undefined}
+                  onOpenArchive={col.isDone ? () => setArchiveOpen(true) : undefined}
                   onQuickAdd={(title) => handleQuickCreate(col.id, title)}
                   onCardClick={(cardId) => onCardClick(cardId)}
                   modules={modules}

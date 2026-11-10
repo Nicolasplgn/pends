@@ -23,6 +23,8 @@ interface KanbanColumnProps {
   onEdit: () => void;
   onDelete: () => void;
   onAddCard: () => void;
+  onArchiveDone?: () => void;
+  onOpenArchive?: () => void;
   onQuickAdd?: (title: string) => Promise<void>;
   onCardClick: (cardId: string) => void;
   modules: Module[];
@@ -42,6 +44,8 @@ export function KanbanColumn({
   onEdit,
   onDelete,
   onAddCard,
+  onArchiveDone,
+  onOpenArchive,
   onQuickAdd,
   onCardClick,
   modules,
@@ -217,6 +221,30 @@ export function KanbanColumn({
           </div>
         )}
       </div>
+
+      {col.isDone && (onArchiveDone || onOpenArchive) && (
+        <div className="px-2 pt-2 flex gap-1.5 border-t border-slate-800/60">
+          {onArchiveDone && cards.length > 0 && (
+            <button
+              type="button"
+              onClick={onArchiveDone}
+              className="flex-1 py-1.5 rounded-lg border border-emerald-800/60 text-emerald-400 hover:bg-emerald-500/10 text-[10px] font-bold font-mono cursor-pointer"
+              title="Tira os concluídos do quadro e guarda no arquivo compacto"
+            >
+              Arquivar concluídos
+            </button>
+          )}
+          {onOpenArchive && (
+            <button
+              type="button"
+              onClick={onOpenArchive}
+              className="flex-1 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white text-[10px] font-bold font-mono cursor-pointer"
+            >
+              Ver arquivo
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="p-2 border-t border-slate-800/60 bg-[#0a0f1d]/50 rounded-b-3xl">
         {quickOpen && onQuickAdd ? (
