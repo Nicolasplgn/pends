@@ -3,37 +3,49 @@
 import { useEffect, useState } from "react";
 import type { Project } from "@prisma/client";
 import { X, FileText, Copy, Check, MessageCircle } from "lucide-react";
-import { buildStatusReport } from "../../actions";
+import { buildStatusReport, getAssignees } from "../../actions";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   projects: Project[];
   defaultProjectId?: string | null;
+  /** Abre já filtrado por pessoa ("__me" = comigo) */
+  defaultAssignee?: string | null;
 }
 
 /** Relatório de status pronto pra colar no WhatsApp/e-mail. */
-export function ReportModal({ isOpen, onClose, projects, defaultProjectId }: Props) {
+export function ReportModal({ isOpen, onClose, projects, defaultProjectId, defaultAssignee }: Props) {
   const [projectId, setProjectId] = useState<string>(defaultProjectId ?? "");
   const [days, setDays] = useState(14);
+  const [assignee, setAssignee] = useState<string>(defaultAssignee ?? "");
+  const [detailed, setDetailed] = useState<boolean>(!!defaultAssignee);
+  const [people, setPeople] = useState<string[]>([]);
   // Resultado guardado com a "chave" do pedido: se a chave mudou, está carregando
   const [result, setResult] = useState<{ key: string; text: string } | null>(null);
   const [edited, setEdited] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const reqKey = `${projectId}|${days}`;
+  const reqKey = `${projectId}|${days}|${assignee}|${detailed}`;
   const loading = result?.key !== reqKey;
   const text = edited ?? (loading ? "" : result!.text);
 
   useEffect(() => {
     if (!isOpen) return;
     let alive = true;
-    buildStatusReport(projectId || null, days).then((r) => {
+    buildStatusReport(projectId || null, days, assignee || null, detailed).then((r) => {
       if (!alive) return;
       setEdited(null);
-      setResult({ key: `${projectId}|${days}`, text: r.text });
+      setResult({ key: `${projectId}|${days}|${assignee}|${detailed}`, text: r.text });
     });
     return () => { alive = false; };
-  }, [isOpen, projectId, days]);
+  }, [isOpen, projectId, days, assignee, detailed]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let alive = true;
+    getAssignees().then((list) => { if (alive) setPeople(list); }).catch(() => {});
+    return () => { alive = false; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,6 +72,13 @@ export function ReportModal({ isOpen, onClose, projects, defaultProjectId }: Pro
               <option value="">Todos os projetos</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
+            <select value={assignee} onChange={(e) => setAssignee(e.target.value)}
+              className={`bg-[#050811] border rounded-lg px-3 py-2 text-sm outline-none ${assignee ? "border-violet-500/50 text-violet-200" : "border-slate-800 text-white"}`}
+              aria-label="Filtrar por pessoa">
+              <option value="">Todas as pessoas</option>
+              <option value="__me">Só comigo</option>
+              {people.map((n) => <option key={n} value={n}>Só com {n}</option>)}
+            </select>
             <select value={days} onChange={(e) => setDays(Number(e.target.value))}
               className="bg-[#050811] border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none" aria-label="Período dos entregues">
               <option value={7}>Entregues: 7 dias</option>
@@ -67,6 +86,11 @@ export function ReportModal({ isOpen, onClose, projects, defaultProjectId }: Pro
               <option value={30}>Entregues: 30 dias</option>
             </select>
           </div>
+
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+            <input type="checkbox" checked={detailed} onChange={(e) => setDetailed(e.target.checked)} className="accent-blue-500" />
+            Com detalhes (resumo da descrição e itens do checklist que faltam)
+          </label>
 
           <textarea
             value={loading && edited === null ? "Montando…" : text}

@@ -847,19 +847,28 @@ function stageKind(col: { kind: string | null; isDone: boolean; title: string })
  * Texto de status pronto pra WhatsApp/e-mail.
  * projectId = null → todos os projetos. Entregues = concluídos nos últimos `days` dias.
  */
-export async function buildStatusReport(projectId: string | null, days = 14) {
+export async function buildStatusReport(
+  projectId: string | null,
+  days = 14,
+  /** "" ou undefined = todas as pessoas · "__me" = comigo · nome = só dessa pessoa */
+  assignee?: string | null,
+  /** Inclui a 1ª linha da descrição e os itens abertos do checklist */
+  detailed = false
+) {
   await requireAuth();
   const since = new Date(Date.now() - days * 86400000);
   const project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
+  const byPerson = !!assignee;
+  const personWhere = assignee === "__me" ? { assignee: null } : assignee ? { assignee } : {};
 
   const [cards, archived] = await Promise.all([
     prisma.card.findMany({
-      where: projectId ? { projectId } : {},
+      where: { ...(projectId ? { projectId } : {}), ...personWhere },
       include: { column: true, project: true },
       orderBy: [{ dueDate: "asc" }, { order: "asc" }],
     }),
     prisma.cardArchive.findMany({
-      where: { completedAt: { gte: since }, ...(project ? { projectTitle: project.title } : {}) },
+      where: { completedAt: { gte: since }, ...(project ? { projectTitle: project.title } : {}), ...personWhere },
       orderBy: { completedAt: "desc" },
     }),
   ]);
@@ -872,7 +881,16 @@ export async function buildStatusReport(projectId: string | null, days = 14) {
     if (list.length) parts.push(`${list.filter((i) => i.done).length}/${list.length}`);
     if (c.dueDate) parts.push(`prazo ${fmt(c.dueDate)}`);
     const proj = !projectId && c.project ? `[${c.project.title}] ` : "";
-    return `- ${proj}${c.title}${parts.length ? ` (${parts.join(" · ")})` : ""}`;
+    let line = `- ${proj}${c.title}${parts.length ? ` (${parts.join(" · ")})` : ""}`;
+    if (detailed) {
+      const first = (c.description ?? "")
+        .split("\n")
+        .map((l) => l.replace(/^[-•\s]+/, "").trim())
+        .find((l) => l && !/^fase \d/i.test(l));
+      if (first) line += `\n   ↳ ${first.length > 140 ? `${first.slice(0, 137)}…` : first}`;
+      for (const i of list.filter((x) => !x.done).slice(0, 6)) line += `\n   ☐ ${i.text}`;
+    }
+    return line;
   };
 
   const groups: Record<string, string[]> = {};
@@ -885,7 +903,7 @@ export async function buildStatusReport(projectId: string | null, days = 14) {
       continue;
     }
     if (kind === "BACKLOG") { push("🧊 No radar (sem prioridade)", label(c)); continue; }
-    if (c.assignee && kind !== "WAITING") { push(`👤 Com ${c.assignee}`, label(c)); continue; }
+    if (!byPerson && c.assignee && kind !== "WAITING") { push(`👤 Com ${c.assignee}`, label(c)); continue; }
     const key = {
       SEND: "📤 Pronto, falta enviar",
       TEST: "🧪 Em teste",
@@ -903,7 +921,10 @@ export async function buildStatusReport(projectId: string | null, days = 14) {
   const sections = [...order, ...people, ...tail].filter((k) => groups[k]?.length);
 
   const today = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-  const header = `*Status ${project ? project.title : "geral"} — ${today}*`;
+  const who = assignee === "__me" ? "comigo" : assignee ? `com ${assignee}` : "";
+  const header = byPerson
+    ? `*Pendências ${who}${project ? ` · ${project.title}` : ""} — ${today}*`
+    : `*Status ${project ? project.title : "geral"} — ${today}*`;
   const body = sections.map((k) => `*${k}*\n${groups[k].join("\n")}`).join("\n\n");
   const totals = Object.fromEntries(sections.map((k) => [k, groups[k].length]));
   return { text: sections.length ? `${header}\n\n${body}` : `${header}\n\nNada registrado.`, totals };
