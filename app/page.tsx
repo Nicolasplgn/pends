@@ -70,6 +70,31 @@ export default function PendsApp() {
     }
   }, []);
 
+  // Aba aberta de antes de uma atualização do site: o Next recusa as ações
+  // da versão antiga. Nesse caso recarrega a página (uma vez a cada minuto, no máximo).
+  useEffect(() => {
+    const isStale = (reason: unknown) =>
+      /Server Action|older or newer deployment|failed-to-find-server-action/i.test(
+        reason instanceof Error ? reason.message : String(reason ?? "")
+      );
+    const reloadOnce = () => {
+      try {
+        const last = Number(sessionStorage.getItem("pends:staleReload") || 0);
+        if (Date.now() - last < 60_000) return;
+        sessionStorage.setItem("pends:staleReload", String(Date.now()));
+      } catch {}
+      window.location.reload();
+    };
+    const onRejection = (e: PromiseRejectionEvent) => { if (isStale(e.reason)) reloadOnce(); };
+    const onError = (e: ErrorEvent) => { if (isStale(e.error ?? e.message)) reloadOnce(); };
+    window.addEventListener("unhandledrejection", onRejection);
+    window.addEventListener("error", onError);
+    return () => {
+      window.removeEventListener("unhandledrejection", onRejection);
+      window.removeEventListener("error", onError);
+    };
+  }, []);
+
   // PWA: registra o service worker (instalável no celular)
   useEffect(() => {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
