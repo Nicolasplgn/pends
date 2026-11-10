@@ -8,7 +8,7 @@ import {
 import type { CardDetails } from "../../types";
 import { isCardOverdue } from "../../types";
 import { 
-  getCardDetails, updateCardDetails, addComment, deleteCard 
+  getCardDetails, updateCardDetails, addComment, deleteCard, getAssignees, updateCardAssignee
 } from "../../actions";
 
 interface CardDetailModalProps {
@@ -34,6 +34,8 @@ export function CardDetailModal({
   const [dueDate, setDueDate] = useState("");
   const [moduleId, setModuleId] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [knownAssignees, setKnownAssignees] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isOpen || !cardId) return;
@@ -47,13 +49,24 @@ export function CardDetailModal({
       setPriority(card.priority);
       setDueDate(card.dueDate ? new Date(card.dueDate).toISOString().split("T")[0] : "");
       setModuleId(card.moduleId || "");
+      setAssignee(card.assignee || "");
       setLoadedFor(cardId);
     });
+
+    getAssignees().then((list) => { if (!cancelled) setKnownAssignees(list); }).catch(() => {});
 
     return () => {
       cancelled = true;
     };
   }, [isOpen, cardId]);
+
+  async function saveAssignee(value: string) {
+    if (!cardId) return;
+    const clean = value.trim();
+    setAssignee(clean);
+    await updateCardAssignee(cardId, clean || null);
+    onReload();
+  }
 
   const loading = !cardId || loadedFor !== cardId;
 
@@ -140,6 +153,39 @@ export function CardDetailModal({
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={() => { void handleSave(); }}
               />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Com quem está</label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {["", ...knownAssignees.filter((n) => n !== assignee), ...(assignee ? [assignee] : [])]
+                  .filter((v, i, arr) => arr.indexOf(v) === i)
+                  .map((name) => (
+                    <button
+                      key={name || "__me"}
+                      type="button"
+                      onClick={() => void saveAssignee(name)}
+                      className={`px-2.5 py-1 rounded-lg border text-xs cursor-pointer transition-colors ${
+                        assignee === name ? "border-violet-500/60 bg-violet-500/15 text-violet-200 font-bold" : "border-slate-800 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {name || "Comigo"}
+                    </button>
+                  ))}
+                <input
+                  placeholder="+ outra pessoa"
+                  className="w-32 bg-[#070a12] border border-slate-800 px-2 py-1 rounded-lg text-xs text-white outline-none focus:border-violet-500"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const v = (e.target as HTMLInputElement).value.trim();
+                      if (v) {
+                        void saveAssignee(v);
+                        (e.target as HTMLInputElement).value = "";
+                      }
+                    }
+                  }}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -80,6 +80,9 @@ model Card {
   moduleId        String?
   module          Module?   @relation(fields: [moduleId], references: [id])
 
+  // Com quem está a pendência (vazio = comigo)
+  assignee        String?
+
   recurringTaskId String?
   recurringTask   RecurringTask? @relation(fields: [recurringTaskId], references: [id])
 
@@ -157,4 +160,22 @@ model Goal {
   active    Boolean   @default(true)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+
+// ARQUIVO COMPACTO: card concluído vira uma linha só (sem histórico de movimentos)
+model CardArchive {
+  id          String    @id            // mesmo id do card original
+  title       String
+  moduleTitle String?
+  moduleColor String?
+  assignee    String?
+  priority    String    @default("Normal")
+  dueDate     DateTime?
+  createdAt   DateTime                 // criação do card original
+  completedAt DateTime?
+  notes       String?                  // descrição + comentários resumidos (até 1.500 caracteres)
+  archivedAt  DateTime  @default(now())
+
+  @@index([archivedAt])
 }

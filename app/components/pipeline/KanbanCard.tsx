@@ -7,6 +7,7 @@ import { CheckCircle2, Circle, AlertTriangle, Calendar, ChevronRight } from "luc
 import type { KanbanCardData } from "../../types";
 import { isCardOverdue } from "../../types";
 import { daysUntil } from "../finances/format";
+import { Avatar } from "./PeopleModal";
 
 function dueChip(dueDate: Date | string | null, completed: boolean) {
   if (!dueDate || completed) return null;
@@ -95,6 +96,8 @@ export function KanbanCard({
               {chip.label}
             </span>
           )}
+
+          {card.assignee && <Avatar name={card.assignee} size={16} />}
 
           <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-mono ${
             card.priority === "Urgente" ? "bg-red-500/20 text-red-400" :
@@ -213,6 +216,12 @@ export function KanbanCard({
           </div>
         ) : (
           <span className="text-[10px] text-slate-600 font-mono">Sem prazo</span>
+        )}
+
+        {card.assignee && (
+          <span className="flex items-center gap-1 text-[10px] font-mono text-violet-300">
+            <Avatar name={card.assignee} size={14} /> {card.assignee}
+          </span>
         )}
 
         {onNextStage && !card.completed && (
