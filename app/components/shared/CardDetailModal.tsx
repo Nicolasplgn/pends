@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Module } from "@prisma/client";
+import type { Module, Project } from "@prisma/client";
+import { CardPlanning } from "./CardPlanning";
 import { 
   AlertTriangle, Trash2, X, AlignLeft, MessageSquare, Send 
 } from "lucide-react";
-import type { CardDetails } from "../../types";
+import type { CardDetails, KanbanColumn } from "../../types";
 import { isCardOverdue } from "../../types";
 import { 
   getCardDetails, updateCardDetails, addComment, deleteCard, getAssignees, updateCardAssignee
@@ -16,6 +17,8 @@ interface CardDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   modules: Module[];
+  projects?: Project[];
+  columns?: KanbanColumn[];
   onReload: () => void;
 }
 
@@ -24,6 +27,8 @@ export function CardDetailModal({
   isOpen,
   onClose,
   modules,
+  projects = [],
+  columns = [],
   onReload,
 }: CardDetailModalProps) {
   const [data, setData] = useState<CardDetails | null>(null);
@@ -239,6 +244,16 @@ export function CardDetailModal({
                 />
               </div>
             </div>
+
+            {data && !loading && (
+              <CardPlanning
+                key={data.id}
+                card={data}
+                projects={projects}
+                columns={columns}
+                onChanged={onReload}
+              />
+            )}
 
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase font-mono flex items-center gap-1.5 mb-1.5">

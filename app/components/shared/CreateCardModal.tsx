@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Module } from "@prisma/client";
+import type { Module, Project } from "@prisma/client";
 
 interface CreateCardModalProps {
   isOpen: boolean;
@@ -9,13 +9,16 @@ interface CreateCardModalProps {
   modules: Module[];
   targetColumnId: string;
   defaultModuleId?: string;
+  projects?: Project[];
+  defaultProjectId?: string;
   onCreate: (
     columnId: string,
     title: string,
     moduleId: string,
     priority: string,
     desc: string,
-    dueDate: string
+    dueDate: string,
+    projectId?: string | null
   ) => Promise<void>;
 }
 
@@ -25,6 +28,8 @@ export function CreateCardModal({
   modules,
   targetColumnId,
   defaultModuleId = "",
+  projects = [],
+  defaultProjectId = "",
   onCreate,
 }: CreateCardModalProps) {
   const [title, setTitle] = useState("");
@@ -32,6 +37,7 @@ export function CreateCardModal({
   const [priority, setPriority] = useState("Normal");
   const [dueDate, setDueDate] = useState("");
   const [desc, setDesc] = useState("");
+  const [projectId, setProjectId] = useState(defaultProjectId);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -41,8 +47,9 @@ export function CreateCardModal({
       setDesc("");
       setDueDate("");
       setPriority("Normal");
+      setProjectId(defaultProjectId);
     }
-  }, [isOpen, defaultModuleId]);
+  }, [isOpen, defaultModuleId, defaultProjectId]);
 
   if (!isOpen) return null;
 
@@ -50,7 +57,7 @@ export function CreateCardModal({
     if (!title.trim() || !targetColumnId || loading) return;
     setLoading(true);
     try {
-      await onCreate(targetColumnId, title.trim(), moduleId, priority, desc, dueDate);
+      await onCreate(targetColumnId, title.trim(), moduleId, priority, desc, dueDate, projectId || null);
       onClose();
     } finally {
       setLoading(false);
@@ -77,6 +84,20 @@ export function CreateCardModal({
               onChange={(e) => setTitle(e.target.value)} 
             />
           </div>
+          {projects.length > 0 && (
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Projeto</label>
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className="w-full bg-[#070a12] border border-slate-800 p-2.5 rounded-xl text-xs text-white outline-none cursor-pointer"
+              >
+                <option value="">Sem projeto</option>
+                {projects.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Módulo</label>

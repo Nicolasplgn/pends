@@ -8,7 +8,7 @@ import {
   getModules, getBoardData, getDashboardStats,
   createModule, updateModule, deleteModule,
   toggleCardCompletion, updateCardModule,
-  createCard, getFinanceSnapshot, exportBackup, sendDigestNow,
+  createCard, getFinanceSnapshot, getProjects, exportBackup, sendDigestNow,
   checkAuthSession, logoutAction
 } from "./actions";
 
@@ -33,6 +33,7 @@ export default function PendsApp() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [modules, setModules] = useState<Module[]>([]);
+  const [projects, setProjects] = useState<Awaited<ReturnType<typeof getProjects>>>([]);
   const [columns, setColumns] = useState<KanbanColumn[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
@@ -56,8 +57,9 @@ export default function PendsApp() {
   const loadAll = useCallback(async () => {
     // Finanças carregam dentro do próprio Hub (getFinanceOverview)
     try {
-      const [mods, board, dash] = await Promise.all([getModules(), getBoardData(), getDashboardStats()]);
+      const [mods, board, dash, projs] = await Promise.all([getModules(), getBoardData(), getDashboardStats(), getProjects()]);
       setModules(mods);
+      setProjects(projs);
       if (board?.columns) setColumns(board.columns);
       setStats(dash);
       setDataVersion((v) => v + 1);
@@ -193,6 +195,8 @@ export default function PendsApp() {
         isOpen={!!selectedCardId} 
         onClose={() => setSelectedCardId(null)} 
         modules={modules}
+        projects={projects}
+        columns={columns}
         onReload={loadAll}
       />
 
@@ -209,8 +213,9 @@ export default function PendsApp() {
         modules={modules}
         targetColumnId={createTargetColumnId}
         defaultModuleId={activeModuleFilter !== "all" ? activeModuleFilter : ""}
-        onCreate={async (colId, title, modId, priority, desc, dueDate) => {
-          await createCard(colId, title, modId, priority, desc, dueDate);
+        projects={projects}
+        onCreate={async (colId, title, modId, priority, desc, dueDate, projectId) => {
+          await createCard(colId, title, modId, priority, desc, dueDate, projectId);
           void loadAll();
         }}
       />
@@ -322,6 +327,7 @@ export default function PendsApp() {
 
         {activeTab === "kanban" && (
           <KanbanBoard
+            projects={projects}
             columns={columns}
             setColumns={setColumns}
             modules={modules}

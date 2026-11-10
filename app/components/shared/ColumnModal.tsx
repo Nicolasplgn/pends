@@ -8,7 +8,7 @@ interface ColumnModalProps {
   isOpen: boolean;
   onClose: () => void;
   column: KanbanColumn | null;
-  onSave: (title: string, isDone: boolean) => Promise<void>;
+  onSave: (title: string, isDone: boolean, kind: string | null) => Promise<void>;
 }
 
 export function ColumnModal({
@@ -19,15 +19,18 @@ export function ColumnModal({
 }: ColumnModalProps) {
   const [title, setTitle] = useState("");
   const [isDone, setIsDone] = useState(false);
+  const [kind, setKind] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (column) {
       setTitle(column.title);
       setIsDone(column.isDone);
+      setKind(column.kind ?? "");
     } else {
       setTitle("");
       setIsDone(false);
+      setKind("");
     }
   }, [column, isOpen]);
 
@@ -39,7 +42,7 @@ export function ColumnModal({
 
     setLoading(true);
     try {
-      await onSave(title.trim(), isDone);
+      await onSave(title.trim(), isDone, isDone ? "DONE" : kind || null);
       onClose();
     } finally {
       setLoading(false);
@@ -128,6 +131,25 @@ export function ColumnModal({
               className="w-full bg-[#070a12] border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-blue-500 outline-none transition-all font-sans"
             />
           </div>
+
+          {!isDone && (
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Tipo da etapa (usado no relatório)</label>
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+                className="w-full bg-[#070a12] border border-slate-800 rounded-xl p-2.5 text-sm text-white outline-none cursor-pointer"
+              >
+                <option value="">Automático (pelo nome)</option>
+                <option value="BACKLOG">🧊 No radar / sem pressa</option>
+                <option value="TODO">📋 A fazer</option>
+                <option value="DOING">🔧 Em andamento</option>
+                <option value="TEST">🧪 Em teste</option>
+                <option value="SEND">📤 Pra enviar</option>
+                <option value="WAITING">⏳ Aguardando resposta</option>
+              </select>
+            </div>
+          )}
 
           {/* TOGGLE ESTILIZADO DE CONCLUSÃO */}
           <div 
