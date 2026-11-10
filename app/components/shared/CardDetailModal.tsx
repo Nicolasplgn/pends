@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Module, Project } from "@prisma/client";
 import { CardPlanning } from "./CardPlanning";
 import { 
-  AlertTriangle, Trash2, X, AlignLeft, MessageSquare, Send 
+  AlertTriangle, Trash2, X, AlignLeft, MessageSquare, Send, Pencil
 } from "lucide-react";
 import type { CardDetails, KanbanColumn } from "../../types";
 import { isCardOverdue } from "../../types";
@@ -94,6 +94,40 @@ export function CardDetailModal({
     onReload();
   }
 
+  const [titleStatus, setTitleStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState("");
+
+  async function saveTitle() {
+    const clean = title.trim();
+    if (!clean) {
+      // Título vazio não vale: volta o que estava
+      setTitle(data?.title ?? "");
+      return;
+    }
+    if (clean === data?.title) return;
+    setTitleStatus("saving");
+    setSaveError("");
+    try {
+      await handleSave({ title: clean });
+      setData((d) => (d ? { ...d, title: clean } : d));
+      setTitle(clean);
+      setTitleStatus("saved");
+      setTimeout(() => setTitleStatus("idle"), 2000);
+    } catch (err) {
+      // Antes o erro sumia em silêncio; agora aparece no campo
+      console.error("Erro ao salvar o título:", err);
+      // Versão antiga do site aberta: recarrega pra pegar a nova (o texto digitado se perde, mas evita salvar "no vazio")
+      if (/Server Action|older or newer deployment/i.test(err instanceof Error ? err.message : String(err))) {
+        setSaveError("O site foi atualizado. Recarregando a página…");
+        setTitleStatus("error");
+        setTimeout(() => window.location.reload(), 1500);
+        return;
+      }
+      setTitleStatus("error");
+      setSaveError(err instanceof Error ? err.message : "Não foi possível salvar.");
+    }
+  }
+
   async function handleAddComment() {
     if (!cardId || !commentText.trim()) return;
     await addComment(cardId, commentText);
@@ -151,13 +185,36 @@ export function CardDetailModal({
         ) : (
           <div className="p-6 overflow-y-auto space-y-5 flex-1">
             <div>
-              <label className="text-[11px] font-bold text-slate-400 uppercase font-mono block mb-1">Título da Pendência</label>
-              <input 
-                className="w-full bg-[#070a12] border border-slate-800 p-2.5 rounded-xl text-base font-semibold text-white outline-none focus:border-blue-500"
+              <label className="text-[11px] font-bold text-slate-400 uppercase font-mono flex items-center justify-between mb-1">
+                <span className="flex items-center gap-1.5"><Pencil size={11} /> Título da pendência (toque para editar)</span>
+                {titleStatus === "saving" && <span className="text-slate-500 normal-case">salvando…</span>}
+                {titleStatus === "saved" && <span className="text-emerald-400 normal-case">salvo ✓</span>}
+                {titleStatus === "error" && <span className="text-rose-400 normal-case">não salvou ✕</span>}
+              </label>
+              <textarea
+                rows={1}
+                ref={(el) => {
+                  // Cresce conforme o texto (títulos longos aparecem inteiros)
+                  if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }
+                }}
+                className="w-full bg-[#070a12] border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl text-base font-semibold text-white outline-none focus:border-blue-500 resize-none overflow-hidden leading-snug"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => { void handleSave(); }}
+                onChange={(e) => {
+                  setTitle(e.target.value.replace(/\n/g, " "));
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  // Enter salva (sai do campo); o título é uma linha só
+                  if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); }
+                }}
+                onBlur={() => { void saveTitle(); }}
               />
+              {titleStatus === "error" && (
+                <p className="mt-1 text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-2.5 py-1.5">
+                  Não salvou: {saveError} Toque fora do campo pra tentar de novo, ou me mande um print desta mensagem.
+                </p>
+              )}
             </div>
 
             <div>
