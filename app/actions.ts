@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "../lib/prisma";
+import { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
 import {
@@ -161,24 +162,25 @@ export async function deleteModule(id: string) {
 // 2. COLUNAS DO KANBAN
 // ==========================================
 
-export async function createColumn(title: string, isDone = false) {
+export async function createColumn(title: string, isDone = false, kind?: string | null) {
   await requireAuth();
   const board = await prisma.board.findFirst();
   if (!board) return;
   const count = await prisma.column.count({ where: { boardId: board.id } });
   await prisma.column.create({
-    data: { title, isDone, boardId: board.id, order: count }
+    data: { title, isDone, boardId: board.id, order: count, kind: isDone ? "DONE" : kind || null }
   });
   revalidatePath("/");
 }
 
-export async function updateColumn(id: string, title: string, isDone?: boolean) {
+export async function updateColumn(id: string, title: string, isDone?: boolean, kind?: string | null) {
   await requireAuth();
   await prisma.column.update({
     where: { id },
-    data: { 
+    data: {
       title,
-      ...(isDone !== undefined ? { isDone } : {})
+      ...(isDone !== undefined ? { isDone } : {}),
+      ...(kind !== undefined ? { kind: isDone ? "DONE" : kind || null } : {}),
     }
   });
   revalidatePath("/");
@@ -197,9 +199,13 @@ export async function deleteColumn(id: string) {
 
 const boardInclude = {
   columns: {
-    include: { 
-      cards: { 
-        include: { module: true },
+    include: {
+      cards: {
+        include: {
+          module: true,
+          project: true,
+          blockedBy: { select: { id: true, title: true, completed: true, column: { select: { isDone: true } } } },
+        },
         orderBy: { order: "asc" as const } 
       } 
     },
@@ -300,8 +306,9 @@ export async function createCard(
   title: string, 
   moduleId: string, 
   priority: string, 
-  description: string, 
-  dueDate?: string
+  description: string,
+  dueDate?: string,
+  projectId?: string | null
 ) {
   await requireAuth();
   const count = await prisma.card.count({ where: { columnId } });
@@ -316,6 +323,7 @@ export async function createCard(
       moduleId: moduleId ? moduleId : null,
       description,
       dueDate: parseOptionalDate(dueDate),
+      projectId: projectId || null,
       order: count,
       completed: isCompleted,
       completedAt: isCompleted ? new Date() : null,
@@ -403,7 +411,7 @@ export async function reorderColumnCards(columnId: string, orderedIds: string[],
 }
 
 /** Criação rápida direto na coluna (só título). */
-export async function quickCreateCard(columnId: string, title: string, moduleId?: string | null) {
+export async function quickCreateCard(columnId: string, title: string, moduleId?: string | null, projectId?: string | null) {
   await requireAuth();
   const clean = title.trim();
   if (!clean) return;
@@ -416,6 +424,7 @@ export async function quickCreateCard(columnId: string, title: string, moduleId?
       title: clean,
       columnId,
       moduleId: moduleId || null,
+      projectId: projectId || null,
       order: count,
       completed: col?.isDone ?? false,
       completedAt: col?.isDone ? new Date() : null,
@@ -478,6 +487,8 @@ export async function getCardDetails(cardId: string) {
     include: {
       module: true,
       column: true,
+      project: true,
+      blockedBy: { select: { id: true, title: true, completed: true, column: { select: { isDone: true, title: true } } } },
       history: { orderBy: { timestamp: "desc" } },
       comments: { orderBy: { createdAt: "desc" } }
     }
@@ -600,7 +611,7 @@ async function archiveCards(minAgeDays: number) {
         { OR: [{ completedAt: { lte: cutoff } }, { completedAt: null, updatedAt: { lte: cutoff } }] },
       ],
     },
-    include: { module: true, comments: { orderBy: { createdAt: "asc" } } },
+    include: { module: true, project: true, comments: { orderBy: { createdAt: "asc" } } },
   });
   if (cards.length === 0) return 0;
 
@@ -614,6 +625,8 @@ async function archiveCards(minAgeDays: number) {
       moduleTitle: c.module?.title ?? null,
       moduleColor: c.module?.color ?? null,
       assignee: c.assignee,
+      projectTitle: c.project?.title ?? null,
+      spentMinutes: c.spentMinutes || null,
       priority: c.priority,
       dueDate: c.dueDate,
       createdAt: c.createdAt,
@@ -626,6 +639,7 @@ async function archiveCards(minAgeDays: number) {
   await prisma.$transaction([
     prisma.cardArchive.createMany({ data: rows, skipDuplicates: true }),
     prisma.transaction.updateMany({ where: { cardId: { in: ids } }, data: { cardId: null } }),
+    prisma.card.updateMany({ where: { blockedById: { in: ids } }, data: { blockedById: null } }),
     prisma.card.deleteMany({ where: { id: { in: ids } } }), // histórico e comentários saem em cascata
   ]);
   return cards.length;
@@ -672,6 +686,7 @@ export async function restoreArchivedCard(id: string) {
     (await prisma.column.findFirst({ orderBy: { order: "asc" } }));
   if (!doneCol) return { success: false };
   const mod = a.moduleTitle ? await prisma.module.findFirst({ where: { title: a.moduleTitle } }) : null;
+  const proj = a.projectTitle ? await prisma.project.findFirst({ where: { title: a.projectTitle } }) : null;
   const count = await prisma.card.count({ where: { columnId: doneCol.id } });
   await prisma.$transaction([
     prisma.card.create({
@@ -683,6 +698,8 @@ export async function restoreArchivedCard(id: string) {
         dueDate: a.dueDate,
         assignee: a.assignee,
         moduleId: mod?.id ?? null,
+        projectId: proj?.id ?? null,
+        spentMinutes: a.spentMinutes ?? 0,
         columnId: doneCol.id,
         order: count,
         completed: doneCol.isDone,
@@ -695,6 +712,201 @@ export async function restoreArchivedCard(id: string) {
   ]);
   revalidatePath("/");
   return { success: true };
+}
+
+// ==========================================
+// 5c. PIPELINE PRO: PROJETOS, PLANEJAMENTO, RELATÓRIO
+// ==========================================
+
+export async function getProjects() {
+  await requireAuth();
+  return prisma.project.findMany({
+    orderBy: [{ active: "desc" }, { title: "asc" }],
+    include: { _count: { select: { cards: true } } },
+  });
+}
+
+export async function saveProject(data: { id?: string; title: string; color?: string; active?: boolean }) {
+  await requireAuth();
+  const title = data.title.trim();
+  if (!title) throw new Error("Dê um nome ao projeto.");
+  if (data.id) {
+    await prisma.project.update({
+      where: { id: data.id },
+      data: { title, ...(data.color ? { color: data.color } : {}), ...(data.active !== undefined ? { active: data.active } : {}) },
+    });
+  } else {
+    await prisma.project.create({ data: { title, color: data.color || "#8B5CF6" } });
+  }
+  revalidatePath("/");
+}
+
+export async function deleteProject(id: string) {
+  await requireAuth();
+  await prisma.project.delete({ where: { id } }); // cards ficam sem projeto (SET NULL)
+  revalidatePath("/");
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/** Projeto, estimativa e "bloqueado por" num só lugar. */
+export async function updateCardPlanning(
+  cardId: string,
+  data: { projectId?: string | null; estimateHours?: number | null; blockedById?: string | null }
+) {
+  await requireAuth();
+  const card = await prisma.card.findUnique({ where: { id: cardId }, include: { project: true } });
+  if (!card) return;
+  const history: { action: string; details: string; user: string }[] = [];
+  const patch: Record<string, unknown> = {};
+
+  if (data.projectId !== undefined && (data.projectId || null) !== card.projectId) {
+    patch.projectId = data.projectId || null;
+    const proj = data.projectId ? await prisma.project.findUnique({ where: { id: data.projectId } }) : null;
+    history.push({ action: "Projeto", details: proj ? `Projeto: ${proj.title}` : "Sem projeto", user: CURRENT_USER });
+  }
+  if (data.estimateHours !== undefined) {
+    const v = data.estimateHours && data.estimateHours > 0 ? Math.round(data.estimateHours * 4) / 4 : null;
+    if (v !== card.estimateHours) patch.estimateHours = v;
+  }
+  if (data.blockedById !== undefined && (data.blockedById || null) !== card.blockedById) {
+    if (data.blockedById === cardId) throw new Error("Um card não pode depender dele mesmo.");
+    patch.blockedById = data.blockedById || null;
+    const dep = data.blockedById ? await prisma.card.findUnique({ where: { id: data.blockedById }, select: { title: true } }) : null;
+    history.push({ action: "Dependência", details: dep ? `Esperando: ${dep.title}` : "Sem dependência", user: CURRENT_USER });
+  }
+  if (Object.keys(patch).length === 0) return;
+  await prisma.card.update({
+    where: { id: cardId },
+    data: { ...patch, ...(history.length ? { history: { create: history } } : {}) },
+  });
+  revalidatePath("/");
+}
+
+/** Salva a lista inteira do checklist (é pequena e fica no próprio card). */
+export async function updateChecklist(cardId: string, items: ChecklistItem[]) {
+  await requireAuth();
+  const clean = items
+    .map((i) => ({ id: String(i.id).slice(0, 40), text: String(i.text).trim().slice(0, 200), done: Boolean(i.done) }))
+    .filter((i) => i.text)
+    .slice(0, 50);
+  await prisma.card.update({ where: { id: cardId }, data: { checklist: clean.length ? clean : Prisma.DbNull } });
+  revalidatePath("/");
+}
+
+/** Liga/desliga o cronômetro; ao parar, soma os minutos no tempo gasto. */
+export async function toggleCardTimer(cardId: string) {
+  await requireAuth();
+  const card = await prisma.card.findUnique({ where: { id: cardId }, select: { timerStartedAt: true, spentMinutes: true } });
+  if (!card) return { running: false, spentMinutes: 0 };
+  if (card.timerStartedAt) {
+    const mins = Math.max(1, Math.round((Date.now() - card.timerStartedAt.getTime()) / 60000));
+    const total = card.spentMinutes + Math.min(mins, 12 * 60); // trava: no máximo 12 h por sessão esquecida
+    await prisma.card.update({ where: { id: cardId }, data: { timerStartedAt: null, spentMinutes: total } });
+    revalidatePath("/");
+    return { running: false, spentMinutes: total };
+  }
+  // Só um cronômetro por vez: para os outros
+  const others = await prisma.card.findMany({ where: { timerStartedAt: { not: null } }, select: { id: true } });
+  for (const o of others) await toggleCardTimer(o.id);
+  await prisma.card.update({ where: { id: cardId }, data: { timerStartedAt: new Date() } });
+  revalidatePath("/");
+  return { running: true, spentMinutes: card.spentMinutes };
+}
+
+export async function addSpentMinutes(cardId: string, minutes: number) {
+  await requireAuth();
+  const card = await prisma.card.findUnique({ where: { id: cardId }, select: { spentMinutes: true } });
+  if (!card) return 0;
+  const total = Math.max(0, card.spentMinutes + Math.round(minutes));
+  await prisma.card.update({ where: { id: cardId }, data: { spentMinutes: total } });
+  revalidatePath("/");
+  return total;
+}
+
+type StageKind = "BACKLOG" | "TODO" | "DOING" | "TEST" | "SEND" | "WAITING" | "DONE";
+
+/** Tipo da etapa: o configurado na coluna ou adivinhado pelo nome. */
+function stageKind(col: { kind: string | null; isDone: boolean; title: string }): StageKind {
+  if (col.isDone) return "DONE";
+  if (col.kind) return col.kind as StageKind;
+  const t = col.title.toLowerCase();
+  if (/gelo|radar|icebox|sem pressa/.test(t)) return "BACKLOG";
+  if (/teste/.test(t)) return "TEST";
+  if (/enviar|entrega/.test(t)) return "SEND";
+  if (/aguard|espera/.test(t)) return "WAITING";
+  if (/solicit|a fazer|todo|entrada/.test(t)) return "TODO";
+  return "DOING";
+}
+
+/**
+ * Texto de status pronto pra WhatsApp/e-mail.
+ * projectId = null → todos os projetos. Entregues = concluídos nos últimos `days` dias.
+ */
+export async function buildStatusReport(projectId: string | null, days = 14) {
+  await requireAuth();
+  const since = new Date(Date.now() - days * 86400000);
+  const project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
+
+  const [cards, archived] = await Promise.all([
+    prisma.card.findMany({
+      where: projectId ? { projectId } : {},
+      include: { column: true, project: true },
+      orderBy: [{ dueDate: "asc" }, { order: "asc" }],
+    }),
+    prisma.cardArchive.findMany({
+      where: { completedAt: { gte: since }, ...(project ? { projectTitle: project.title } : {}) },
+      orderBy: { completedAt: "desc" },
+    }),
+  ]);
+
+  const fmt = (d: Date | null) =>
+    d ? d.toLocaleDateString("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit" }) : "";
+  const label = (c: (typeof cards)[number]) => {
+    const parts: string[] = [];
+    const list = (c.checklist as unknown as ChecklistItem[] | null) ?? [];
+    if (list.length) parts.push(`${list.filter((i) => i.done).length}/${list.length}`);
+    if (c.dueDate) parts.push(`prazo ${fmt(c.dueDate)}`);
+    const proj = !projectId && c.project ? `[${c.project.title}] ` : "";
+    return `- ${proj}${c.title}${parts.length ? ` (${parts.join(" · ")})` : ""}`;
+  };
+
+  const groups: Record<string, string[]> = {};
+  const push = (key: string, line: string) => (groups[key] ??= []).push(line);
+
+  for (const c of cards) {
+    const kind = stageKind(c.column);
+    if (kind === "DONE" || c.completed) {
+      if ((c.completedAt ?? c.updatedAt) >= since) push("✅ Entregue", label(c));
+      continue;
+    }
+    if (kind === "BACKLOG") { push("🧊 No radar (sem prioridade)", label(c)); continue; }
+    if (c.assignee && kind !== "WAITING") { push(`👤 Com ${c.assignee}`, label(c)); continue; }
+    const key = {
+      SEND: "📤 Pronto, falta enviar",
+      TEST: "🧪 Em teste",
+      DOING: "🔧 Em andamento",
+      WAITING: "⏳ Aguardando resposta",
+      TODO: "📋 A fazer",
+    }[kind];
+    push(key, label(c));
+  }
+  for (const a of archived) push("✅ Entregue", `- ${!projectId && a.projectTitle ? `[${a.projectTitle}] ` : ""}${a.title}`);
+
+  const order = ["✅ Entregue", "📤 Pronto, falta enviar", "🧪 Em teste", "🔧 Em andamento"];
+  const people = Object.keys(groups).filter((k) => k.startsWith("👤")).sort();
+  const tail = ["⏳ Aguardando resposta", "📋 A fazer", "🧊 No radar (sem prioridade)"];
+  const sections = [...order, ...people, ...tail].filter((k) => groups[k]?.length);
+
+  const today = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const header = `*Status ${project ? project.title : "geral"} — ${today}*`;
+  const body = sections.map((k) => `*${k}*\n${groups[k].join("\n")}`).join("\n\n");
+  const totals = Object.fromEntries(sections.map((k) => [k, groups[k].length]));
+  return { text: sections.length ? `${header}\n\n${body}` : `${header}\n\nNada registrado.`, totals };
 }
 
 // ==========================================
@@ -1592,7 +1804,7 @@ export async function getTodayOverview() {
     }),
     prisma.card.findMany({
       where: { completed: false, column: { isDone: false }, dueDate: { not: null, lte: in14 } },
-      include: { module: true, column: { select: { title: true } } },
+      include: { module: true, project: true, column: { select: { title: true } } },
       orderBy: [{ dueDate: "asc" }, { order: "asc" }],
       take: 200,
     }),

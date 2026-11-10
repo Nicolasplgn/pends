@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Module } from "@prisma/client";
+import type { Module, Project } from "@prisma/client";
 import { 
   DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners,
   useSensor, useSensors, PointerSensor, TouchSensor, KeyboardSensor
@@ -9,7 +9,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { 
   ChevronLeft, ChevronRight, Filter, Plus, Search, 
-  Flame, Clock, LayoutGrid, Rows3, Table, Snowflake, Repeat, Users
+  Flame, Clock, LayoutGrid, Rows3, Table, Snowflake, Repeat, Users, FolderKanban, FileText, CalendarRange
 } from "lucide-react";
 import type { KanbanColumn as KanbanColumnType, KanbanCardData } from "../../types";
 import { MONTH_NAMES, isCardOverdue } from "../../types";
@@ -20,9 +20,13 @@ import { ConfirmModal } from "../shared/ConfirmModal";
 import { RoutinesModal } from "./RoutinesModal";
 import { PeopleModal } from "./PeopleModal";
 import { ArchiveModal } from "./ArchiveModal";
+import { ProjectsModal } from "./ProjectsModal";
+import { ReportModal } from "./ReportModal";
+import { WeekPlanModal } from "./WeekPlanModal";
 import { moveCard, createColumn, updateColumn, deleteColumn, moveColumn, reorderColumnCards, quickCreateCard, archiveDoneCardsNow } from "../../actions";
 
 interface KanbanBoardProps {
+  projects?: (Project & { _count?: { cards: number } })[];
   columns: KanbanColumnType[];
   setColumns: React.Dispatch<React.SetStateAction<KanbanColumnType[]>>;
   modules: Module[];
@@ -40,6 +44,7 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({
+  projects = [],
   columns,
   setColumns,
   modules,
@@ -99,6 +104,11 @@ export function KanbanBoard({
   const [confirmArchive, setConfirmArchive] = useState(false);
   // "all" = todos · "__me" = comigo · nome = com essa pessoa
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  // "all" = todos · "__none" = sem projeto · id = projeto
+  const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [weekOpen, setWeekOpen] = useState(false);
 
   const assigneeNames = useMemo(
     () => [...new Set(columns.flatMap((c) => c.cards.map((k) => k.assignee).filter(Boolean) as string[]))].sort(),
@@ -136,6 +146,9 @@ export function KanbanBoard({
   const isCardMatchingFilters = (card: KanbanCardData) => {
     const matchesModule = activeModuleFilter === "all" || card.moduleId === activeModuleFilter;
     if (!matchesModule) return false;
+
+    if (projectFilter === "__none" && card.projectId) return false;
+    if (projectFilter !== "all" && projectFilter !== "__none" && card.projectId !== projectFilter) return false;
 
     if (assigneeFilter === "__me" && card.assignee) return false;
     if (assigneeFilter !== "all" && assigneeFilter !== "__me" && card.assignee !== assigneeFilter) return false;
@@ -250,7 +263,12 @@ export function KanbanBoard({
   }
 
   async function handleQuickCreate(colId: string, title: string) {
-    await quickCreateCard(colId, title, activeModuleFilter !== "all" ? activeModuleFilter : null);
+    await quickCreateCard(
+      colId,
+      title,
+      activeModuleFilter !== "all" ? activeModuleFilter : null,
+      projectFilter !== "all" && projectFilter !== "__none" ? projectFilter : null
+    );
     await onReload();
   }
 
@@ -293,11 +311,11 @@ export function KanbanBoard({
     void onReload();
   }
 
-  async function handleSaveColumn(title: string, isDone: boolean) {
+  async function handleSaveColumn(title: string, isDone: boolean, kind: string | null) {
     if (editingColumn) {
-      await updateColumn(editingColumn.id, title, isDone);
+      await updateColumn(editingColumn.id, title, isDone, kind);
     } else {
-      await createColumn(title, isDone);
+      await createColumn(title, isDone, kind);
     }
     await onReload();
   }
@@ -322,6 +340,15 @@ export function KanbanBoard({
         column={editingColumn}
         onSave={handleSaveColumn}
       />
+
+      <ProjectsModal isOpen={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} onChanged={() => void onReload()} />
+      {reportOpen && <ReportModal
+        isOpen={reportOpen}
+        onClose={() => setReportOpen(false)}
+        projects={projects}
+        defaultProjectId={projectFilter !== "all" && projectFilter !== "__none" ? projectFilter : null}
+      />}
+      <WeekPlanModal isOpen={weekOpen} onClose={() => setWeekOpen(false)} columns={columns} onCardClick={onCardClick} />
 
       <PeopleModal
         isOpen={peopleOpen}
@@ -497,6 +524,47 @@ export function KanbanBoard({
           </div>
 
           <div className="flex items-center gap-1">
+            <select
+              value={projectFilter}
+              onChange={(e) => {
+                if (e.target.value === "__manage") { setProjectsOpen(true); return; }
+                setProjectFilter(e.target.value);
+              }}
+              className={`bg-[#0b101f] border rounded-xl px-2 py-1.5 text-xs font-mono outline-none cursor-pointer max-w-36 ${
+                projectFilter === "all" ? "border-slate-800 text-slate-400" : "border-violet-500/50 text-violet-200"
+              }`}
+              aria-label="Filtrar por projeto"
+            >
+              <option value="all">Todos projetos</option>
+              {projects.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+              <option value="__none">Sem projeto</option>
+              <option value="__manage">⚙ Gerenciar projetos…</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => setWeekOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0b101f] border border-slate-800 text-xs font-mono text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40 cursor-pointer transition-colors"
+              title="Planejamento da semana (horas)"
+            >
+              <CalendarRange size={13} /> <span className="hidden sm:inline">Semana</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0b101f] border border-slate-800 text-xs font-mono text-slate-400 hover:text-blue-300 hover:border-blue-500/40 cursor-pointer transition-colors"
+              title="Relatório de status pra mandar"
+            >
+              <FileText size={13} /> <span className="hidden sm:inline">Relatório</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProjectsOpen(true)}
+              className="hidden lg:flex items-center p-1.5 rounded-xl bg-[#0b101f] border border-slate-800 text-slate-500 hover:text-violet-300 cursor-pointer"
+              title="Gerenciar projetos"
+              aria-label="Gerenciar projetos"
+            >
+              <FolderKanban size={13} />
+            </button>
             <button
               type="button"
               onClick={() => setPeopleOpen(true)}

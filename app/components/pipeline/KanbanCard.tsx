@@ -3,7 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Module } from "@prisma/client";
-import { CheckCircle2, Circle, AlertTriangle, Calendar, ChevronRight } from "lucide-react";
+import { CheckCircle2, Circle, AlertTriangle, Calendar, ChevronRight, Lock, ListChecks, Timer } from "lucide-react";
 import type { KanbanCardData } from "../../types";
 import { isCardOverdue } from "../../types";
 import { daysUntil } from "../finances/format";
@@ -43,6 +43,10 @@ export function KanbanCard({
 
   const overdue = isCardOverdue(card.dueDate, card.completed);
   const chip = dueChip(card.dueDate, card.completed);
+  const checklist = ((card.checklist as unknown) as { done: boolean }[] | null) ?? [];
+  const checkDone = checklist.filter((i) => i.done).length;
+  const blocked = !!card.blockedBy && !card.blockedBy.completed && !card.blockedBy.column?.isDone;
+  const timerOn = !!card.timerStartedAt;
 
   // MODO COMPACTO (ALTA DENSIDADE: CABE 30 TAREFAS NA TELA)
   if (density === "compact") {
@@ -97,6 +101,15 @@ export function KanbanCard({
             </span>
           )}
 
+          {blocked && (
+            <span title={`Esperando: ${card.blockedBy!.title}`} className="text-amber-400"><Lock size={11} /></span>
+          )}
+          {timerOn && <span title="Cronômetro rodando" className="text-rose-400 animate-pulse"><Timer size={11} /></span>}
+          {checklist.length > 0 && (
+            <span className={`text-[8px] font-mono font-bold ${checkDone === checklist.length ? "text-emerald-400" : "text-slate-400"}`}>
+              {checkDone}/{checklist.length}
+            </span>
+          )}
           {card.assignee && <Avatar name={card.assignee} size={16} />}
 
           <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-mono ${
@@ -195,6 +208,13 @@ export function KanbanCard({
         </div>
       </div>
 
+      {card.project && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono mb-1" style={{ color: card.project.color }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: card.project.color }} />
+          {card.project.title}
+        </span>
+      )}
+
       <h4 className={`font-semibold text-sm mb-1 leading-snug line-clamp-2 ${
         card.completed ? "line-through text-slate-400" : overdue ? "text-red-200" : "text-slate-200"
       }`}>
@@ -203,6 +223,28 @@ export function KanbanCard({
 
       {card.description && (
         <p className="text-xs text-slate-400 line-clamp-1 mb-2 font-sans">{card.description}</p>
+      )}
+
+      {(blocked || checklist.length > 0 || card.estimateHours || card.spentMinutes > 0 || timerOn) && (
+        <div className="flex flex-wrap items-center gap-2 mb-1 text-[10px] font-mono">
+          {blocked && (
+            <span className="flex items-center gap-1 text-amber-400" title={`Esperando: ${card.blockedBy!.title}`}>
+              <Lock size={10} /> bloqueado
+            </span>
+          )}
+          {checklist.length > 0 && (
+            <span className={`flex items-center gap-1 ${checkDone === checklist.length ? "text-emerald-400" : "text-slate-400"}`}>
+              <ListChecks size={10} /> {checkDone}/{checklist.length}
+            </span>
+          )}
+          {(card.estimateHours || card.spentMinutes > 0) && (
+            <span className={`flex items-center gap-1 ${card.estimateHours && card.spentMinutes / 60 > card.estimateHours ? "text-rose-400" : "text-slate-400"}`}>
+              <Timer size={10} className={timerOn ? "text-rose-400 animate-pulse" : ""} />
+              {Math.round((card.spentMinutes / 60) * 10) / 10}
+              {card.estimateHours ? `/${card.estimateHours}` : ""} h
+            </span>
+          )}
+        </div>
       )}
 
       <div className="flex items-center justify-between border-t border-slate-800/60 pt-2 mt-2">

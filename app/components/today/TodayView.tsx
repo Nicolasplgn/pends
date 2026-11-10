@@ -110,8 +110,9 @@ export function TodayView({ modules, onOpenCard, onNewCard, onGoTo, onExternalCh
     for (const c of data.cards) {
       list.push({
         key: `card-${c.id}`, kind: "task", id: c.id, title: c.title,
-        sub: `${c.module?.title ?? "Geral"} · ${c.column.title}${c.assignee ? ` · com ${c.assignee}` : ""}`,
-        color: c.module?.color ?? "#64748b", due: new Date(c.dueDate!), days: daysUntil(c.dueDate!), priority: c.priority,
+        sub: `${c.project?.title ?? c.module?.title ?? "Geral"} · ${c.column.title}${c.assignee ? ` · com ${c.assignee}` : ""}`,
+        color: c.project?.color ?? c.module?.color ?? "#64748b",
+        due: new Date(c.dueDate!), days: daysUntil(c.dueDate!), priority: c.priority,
       });
     }
     // Ordem: data, depois contas antes de tarefas

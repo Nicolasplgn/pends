@@ -54,6 +54,8 @@ model Column {
   title   String
   order   Int
   isDone  Boolean @default(false)
+  // Tipo da etapa (para relatório/fluxo): BACKLOG | TODO | DOING | TEST | SEND | WAITING | DONE
+  kind    String?
   boardId String
   board   Board   @relation(fields: [boardId], references: [id])
   cards   Card[]
@@ -82,6 +84,23 @@ model Card {
 
   // Com quem está a pendência (vazio = comigo)
   assignee        String?
+
+  // Projeto/cliente (Wave, Gambine…)
+  projectId       String?
+  project         Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  // Horas: estimativa, tempo gasto (min) e cronômetro rodando
+  estimateHours   Float?
+  spentMinutes    Int       @default(0)
+  timerStartedAt  DateTime?
+
+  // Checklist leve dentro do card: [{ id, text, done }]
+  checklist       Json?
+
+  // Dependência: este card espera outro terminar
+  blockedById     String?
+  blockedBy       Card?     @relation("CardDependency", fields: [blockedById], references: [id], onDelete: SetNull)
+  blocking        Card[]    @relation("CardDependency")
 
   recurringTaskId String?
   recurringTask   RecurringTask? @relation(fields: [recurringTaskId], references: [id])
@@ -170,6 +189,8 @@ model CardArchive {
   moduleTitle String?
   moduleColor String?
   assignee    String?
+  projectTitle String?
+  spentMinutes Int?
   priority    String    @default("Normal")
   dueDate     DateTime?
   createdAt   DateTime                 // criação do card original
@@ -178,4 +199,15 @@ model CardArchive {
   archivedAt  DateTime  @default(now())
 
   @@index([archivedAt])
+}
+
+
+// PROJETOS / CLIENTES do pipeline
+model Project {
+  id        String   @id @default(uuid())
+  title     String
+  color     String   @default("#8B5CF6")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  cards     Card[]
 }
