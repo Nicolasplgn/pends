@@ -115,6 +115,7 @@ export function KanbanBoard({
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [reportAssignee, setReportAssignee] = useState<string | null>(null);
   const [weekOpen, setWeekOpen] = useState(false);
 
   const assigneeNames = useMemo(
@@ -366,9 +367,10 @@ export function KanbanBoard({
       <ProjectsModal isOpen={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} onChanged={() => void onReload()} />
       {reportOpen && <ReportModal
         isOpen={reportOpen}
-        onClose={() => setReportOpen(false)}
+        onClose={() => { setReportOpen(false); setReportAssignee(null); }}
         projects={projects}
         defaultProjectId={projectFilter !== "all" && projectFilter !== "__none" ? projectFilter : null}
+        defaultAssignee={reportAssignee ?? (assigneeFilter !== "all" ? assigneeFilter : null)}
       />}
       <WeekPlanModal isOpen={weekOpen} onClose={() => setWeekOpen(false)} columns={columns} onCardClick={onCardClick} />
 
@@ -378,6 +380,7 @@ export function KanbanBoard({
         columns={columns}
         onCardClick={onCardClick}
         onFilter={(who) => setAssigneeFilter(who)}
+        onReport={(who) => { setReportAssignee(who); setReportOpen(true); }}
       />
       <ArchiveModal isOpen={archiveOpen} onClose={() => setArchiveOpen(false)} onRestored={() => void onReload()} />
       <ConfirmModal

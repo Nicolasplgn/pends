@@ -11,12 +11,13 @@ interface Props {
   columns: KanbanColumn[];
   onCardClick: (cardId: string) => void;
   onFilter: (assignee: string) => void;
+  onReport?: (assignee: string) => void;
 }
 
 const ME = "Eu";
 
 /** "Onde está cada coisa": pendências abertas agrupadas por responsável. */
-export function PeopleModal({ isOpen, onClose, columns, onCardClick, onFilter }: Props) {
+export function PeopleModal({ isOpen, onClose, columns, onCardClick, onFilter, onReport }: Props) {
   const groups = useMemo(() => {
     const map = new Map<string, { id: string; title: string; column: string; dueDate: Date | null; overdue: boolean; color: string }[]>();
     for (const col of columns) {
@@ -71,13 +72,24 @@ export function PeopleModal({ isOpen, onClose, columns, onCardClick, onFilter }:
                   {g.who === ME ? "Comigo" : g.who}
                   <span className="text-[10px] font-mono text-slate-500">{g.items.length}</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => { onFilter(g.who === ME ? "__me" : g.who); onClose(); }}
-                  className="text-[10px] font-mono text-slate-400 hover:text-white underline underline-offset-2 cursor-pointer"
-                >
-                  filtrar no quadro
-                </button>
+                <span className="flex items-center gap-3">
+                  {onReport && (
+                    <button
+                      type="button"
+                      onClick={() => { onReport(g.who === ME ? "__me" : g.who); onClose(); }}
+                      className="text-[10px] font-mono font-bold text-blue-300 hover:text-white underline underline-offset-2 cursor-pointer"
+                    >
+                      relatório
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { onFilter(g.who === ME ? "__me" : g.who); onClose(); }}
+                    className="text-[10px] font-mono text-slate-400 hover:text-white underline underline-offset-2 cursor-pointer"
+                  >
+                    filtrar no quadro
+                  </button>
+                </span>
               </div>
               <div className="rounded-2xl border border-slate-800 divide-y divide-slate-800/80 overflow-hidden">
                 {g.items.map((c) => (
