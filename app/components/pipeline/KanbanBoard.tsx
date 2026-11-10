@@ -99,6 +99,13 @@ export function KanbanBoard({
   const [editingColumn, setEditingColumn] = useState<KanbanColumnType | null>(null);
   const [deleteTargetColumnId, setDeleteTargetColumnId] = useState<string | null>(null);
   const [routinesOpen, setRoutinesOpen] = useState(false);
+  const [boardError, setBoardError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!boardError) return;
+    const t = setTimeout(() => setBoardError(null), 5000);
+    return () => clearTimeout(t);
+  }, [boardError]);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -313,11 +320,21 @@ export function KanbanBoard({
 
   async function handleSaveColumn(title: string, isDone: boolean, kind: string | null) {
     if (editingColumn) {
-      await updateColumn(editingColumn.id, title, isDone, kind);
-    } else {
-      await createColumn(title, isDone, kind);
+      // Otimista: o nome troca na hora e o modal fecha; o banco salva por trás.
+      const id = editingColumn.id;
+      const before = columns;
+      setColumns((prev) => prev.map((c) => (c.id === id ? { ...c, title, isDone, kind: isDone ? "DONE" : kind } : c)));
+      updateColumn(id, title, isDone, kind)
+        .then(() => onReload())
+        .catch((err) => {
+          console.error("Erro ao salvar a etapa:", err);
+          setColumns(before);
+          setBoardError("Não consegui salvar o nome da etapa. Tente de novo.");
+        });
+      return;
     }
-    await onReload();
+    await createColumn(title, isDone, kind);
+    void onReload();
   }
 
   async function handleConfirmDeleteColumn() {
@@ -329,6 +346,11 @@ export function KanbanBoard({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#050811]">
+      {boardError && (
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-70 px-4 py-2.5 rounded-xl bg-rose-950 border border-rose-500/50 text-xs text-rose-200 shadow-2xl">
+          {boardError}
+        </div>
+      )}
       
       {/* MODAL MODERNO DE CRIAR/EDITAR ETAPA */}
       <ColumnModal
