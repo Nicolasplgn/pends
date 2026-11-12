@@ -47,7 +47,6 @@ export function NeuralView({
 
   const totalAllTasks = columns.reduce((acc: number, c) => acc + c.cards.length, 0);
   const completedAllTasks = columns.reduce((acc: number, c) => acc + c.cards.filter((card) => card.completed).length, 0);
-  const globalCompletionRate = totalAllTasks > 0 ? Math.round((completedAllTasks / totalAllTasks) * 100) : 0;
 
   const moduleNodes: NeuralNode[] = useMemo(() => {
     const count = modules.length;
@@ -144,11 +143,6 @@ export function NeuralView({
               <span className="hidden sm:inline">Painel Modular</span>
               <span className="sm:hidden">Módulos</span>
             </button>
-          </div>
-
-          <div className="px-3.5 py-1.5 rounded-xl bg-[#070b14] border border-slate-800 font-mono text-xs flex items-center gap-2">
-            <span className="text-slate-400">Entrega:</span>
-            <span className="font-bold text-emerald-400">{globalCompletionRate}%</span>
           </div>
         </div>
       </div>
