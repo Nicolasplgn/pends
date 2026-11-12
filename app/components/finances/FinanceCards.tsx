@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CreditCard, Plus, Pencil, ChevronDown, ChevronRight, CheckCircle2, Undo2, Loader2, X, Trash2 } from "lucide-react";
-import { deleteCreditCard, getCreditCardsOverview, payInvoice, saveCreditCard } from "@/app/actions";
+import { deleteCreditCard, getCreditCardsOverview, payInvoice, saveCreditCard, setInvoiceTotal } from "@/app/actions";
 import { invoiceLabel } from "@/lib/invoice";
 import { brl, fmtDate, moneyToInput, parseMoney } from "./format";
 import { Bar, EmptyState, Panel } from "./ui";
@@ -34,6 +34,22 @@ export function FinanceCards({ onNewPurchase, onChanged, refreshKey }: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<Card | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState<{ key: string; value: string } | null>(null);
+
+  async function saveTotal(inv: Invoice, raw: string) {
+    if (!card) return;
+    const v = parseMoney(raw);
+    if (!(v >= 0)) return;
+    setBusy(inv.key);
+    try {
+      await setInvoiceTotal(card.id, inv.key, v);
+      setAdjusting(null);
+      await load();
+      onChanged(`Fatura de ${invoiceLabel(inv.key)} ajustada para ${brl(v)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const load = useCallback(async () => {
     const data = await getCreditCardsOverview();
@@ -166,7 +182,33 @@ export function FinanceCards({ onNewPurchase, onChanged, refreshKey }: Props) {
                           </span>
                         </span>
                       </button>
-                      <span className={`text-sm font-bold font-mono shrink-0 ${inv.paid ? "text-slate-500" : "text-white"}`}>{brl(inv.total)}</span>
+                      {adjusting?.key === inv.key ? (
+                        <span className="flex items-center gap-1 shrink-0">
+                          <input
+                            autoFocus
+                            inputMode="decimal"
+                            value={adjusting.value}
+                            onChange={(e) => setAdjusting({ key: inv.key, value: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void saveTotal(inv, adjusting.value);
+                              if (e.key === "Escape") setAdjusting(null);
+                            }}
+                            className="w-24 bg-[#0a0f1d] border border-amber-500/50 rounded px-2 py-1 text-xs text-white font-mono text-right outline-none"
+                            aria-label="Total da fatura no banco"
+                          />
+                          <button type="button" disabled={busy === inv.key} onClick={() => void saveTotal(inv, adjusting.value)}
+                            className="px-2 py-1 rounded bg-amber-500 text-slate-950 text-[10px] font-bold disabled:opacity-50 cursor-pointer">ok</button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAdjusting({ key: inv.key, value: moneyToInput(inv.total) })}
+                          className={`text-sm font-bold font-mono shrink-0 hover:underline decoration-dotted cursor-pointer ${inv.paid ? "text-slate-500" : "text-white"}`}
+                          title="Ajustar o total pelo valor do banco"
+                        >
+                          {brl(inv.total)}
+                        </button>
+                      )}
                       {inv.items.length > 0 &&
                         (inv.paid ? (
                           <button type="button" disabled={busy === inv.key} onClick={() => void pay(inv, false)}

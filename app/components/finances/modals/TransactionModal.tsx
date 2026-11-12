@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Module } from "@prisma/client";
 import { X, ArrowDownRight, ArrowUpRight, Layers, CheckCircle2, Trash2, Kanban, Clock } from "lucide-react";
 import { createTransaction, listCreditCards, updateTransaction, type TxScope } from "@/app/actions";
-import { invoiceFor, invoiceLabel } from "@/lib/invoice";
+import { invoiceDueDate, invoiceFor, invoiceLabel, monthKey, shiftMonthKey } from "@/lib/invoice";
 import type { FinanceTx, PayMethod, TxType } from "../../../types";
 import { PAY_METHOD_LABEL } from "../../../types";
 import { brl, moneyToInput, parseMoney, toInputDate, todayInputDate } from "../format";
@@ -46,6 +46,8 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
   const [method, setMethod] = useState<PayMethod>("PIX");
   const [cards, setCards] = useState<CardOption[]>([]);
   const [creditCardId, setCreditCardId] = useState("");
+  // "" = fatura calculada pela data da compra · "2026-12" = escolhida à mão
+  const [invoiceMonth, setInvoiceMonth] = useState("");
   // Status automático: data de hoje/passada = pago; data futura = a pagar.
   // Só vira manual se a pessoa tocar em "mudar".
   const [paidOverride, setPaidOverride] = useState<boolean | null>(null);
@@ -74,6 +76,8 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
       setCategory(initialData.category);
       setMethod((initialData.paymentMethod as PayMethod) || "PIX");
       setCreditCardId(initialData.creditCardId ?? "");
+      // Editar não muda a fatura sozinho: mantém a atual até você trocar
+      setInvoiceMonth(initialData.invoiceMonth ?? "");
       setPaidOverride(initialData.paid);
       setNotes(initialData.notes ?? "");
       setIsInstallment(initialData.isInstallment);
@@ -85,6 +89,7 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
       setCategory(modules[0]?.title ?? "Geral");
       setMethod(defaults?.paymentMethod ?? "PIX");
       setCreditCardId(defaults?.creditCardId ?? "");
+      setInvoiceMonth("");
       setPaidOverride(null);
       setNotes("");
       setIsInstallment(false);
@@ -124,10 +129,16 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
     if (!onCard || !selectedCard || !dueDate) return null;
     const purchase = new Date(`${dueDate}T12:00:00Z`);
     const n = isInstallment && !isEdit ? Math.max(installments - startAt + 1, 1) : 1;
-    const first = invoiceFor(selectedCard, purchase, 0);
-    const last = invoiceFor(selectedCard, purchase, n - 1);
-    return { first, last, n };
-  }, [onCard, selectedCard, dueDate, isInstallment, isEdit, installments, startAt]);
+    const auto = invoiceFor(selectedCard, purchase, 0);
+    const place = (k: number) =>
+      invoiceMonth
+        ? { invoiceMonth: shiftMonthKey(invoiceMonth, k), dueDate: invoiceDueDate(selectedCard, shiftMonthKey(invoiceMonth, k)) }
+        : invoiceFor(selectedCard, purchase, k);
+    return { first: place(0), last: place(n - 1), n, auto };
+  }, [onCard, selectedCard, dueDate, isInstallment, isEdit, installments, startAt, invoiceMonth]);
+
+  const now = new Date();
+  const invoiceOptions = Array.from({ length: 16 }, (_, i) => monthKey(now.getFullYear(), now.getMonth() - 3 + i));
   const paid = paidOverride ?? autoPaid;
   const parsedAmount = parseMoney(amount);
   const preview = useMemo(() => {
@@ -154,6 +165,7 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
         category: category || "Geral",
         paymentMethod: method,
         creditCardId: onCard ? creditCardId : null,
+        invoiceMonth: onCard && invoiceMonth ? invoiceMonth : null,
         dueDate,
         notes: notes.trim() || null,
         paid,
@@ -314,6 +326,19 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
                         </button>
                       ))}
                     </div>
+                    {cardPreview && (
+                      <label className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                        Fatura:
+                        <select
+                          value={invoiceMonth}
+                          onChange={(e) => setInvoiceMonth(e.target.value)}
+                          className="bg-[#050811] border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none"
+                        >
+                          <option value="">Automática pela data ({invoiceLabel(cardPreview.auto.invoiceMonth)})</option>
+                          {invoiceOptions.map((k) => <option key={k} value={k}>{invoiceLabel(k)}</option>)}
+                        </select>
+                      </label>
+                    )}
                     {cardPreview && (
                       <p className="text-[11px] font-mono text-amber-200">
                         {cardPreview.n > 1

@@ -19,6 +19,12 @@ export function parseMonthKey(key: string) {
   return { year: y, month: m - 1 };
 }
 
+/** "2026-12" + 2 → "2027-02" */
+export function shiftMonthKey(key: string, k: number) {
+  const { year, month } = parseMonthKey(key);
+  return monthKey(year, month + k);
+}
+
 /** Vencimento da fatura de um mês ("2026-12" → 11/12/2026 ao meio-dia UTC). */
 export function invoiceDueDate(card: CardCycle, key: string) {
   const { year, month } = parseMonthKey(key);
