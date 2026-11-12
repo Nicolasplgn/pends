@@ -152,6 +152,12 @@ model Transaction {
 
   notes              String?
 
+  // Cartão de crédito: em qual cartão, data real da compra e fatura ("2026-12")
+  creditCardId       String?
+  creditCard         CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  purchaseDate       DateTime?
+  invoiceMonth       String?
+
   // Origem: conta fixa que gerou este lançamento
   recurringTaskId    String?
   recurringTask      RecurringTask? @relation(fields: [recurringTaskId], references: [id], onDelete: SetNull)
@@ -165,6 +171,7 @@ model Transaction {
 
   @@index([dueDate])
   @@index([installmentId])
+  @@index([creditCardId, invoiceMonth])
 }
 
 // METAS / RESERVAS (caixinhas)
@@ -210,4 +217,18 @@ model Project {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   cards     Card[]
+}
+
+
+// CARTÕES DE CRÉDITO: a compra cai na fatura pelo dia de fechamento
+model CreditCard {
+  id           String        @id @default(uuid())
+  name         String
+  color        String        @default("#8B5CF6")
+  closingDay   Int           // dia em que a fatura fecha
+  dueDay       Int           // dia de vencimento da fatura
+  limit        Float?
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
 }

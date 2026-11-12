@@ -8,6 +8,7 @@ import { randomUUID } from "crypto";
 import {
   SESSION_COOKIE, SESSION_MAX_AGE_S, createSessionToken, credentialsMatch, isAuthenticated, requireAuth,
 } from "../lib/session";
+import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey } from "../lib/invoice";
 
 const CURRENT_USER = "Nicolas";
 
@@ -1494,6 +1495,14 @@ export interface TransactionInput {
   notes?: string | null;
   paid?: boolean;
   cardId?: string | null;
+  /** Cartão de crédito: com ele, `dueDate` é a DATA DA COMPRA e o vencimento sai da fatura */
+  creditCardId?: string | null;
+}
+
+/** Cartão da compra (só se a forma for cartão e o cartão existir). */
+async function cardFor(data: { paymentMethod: string; creditCardId?: string | null }) {
+  if (data.paymentMethod !== "CREDIT_CARD" || !data.creditCardId) return null;
+  return prisma.creditCard.findUnique({ where: { id: data.creditCardId } });
 }
 
 export async function createTransaction(
@@ -1512,6 +1521,14 @@ export async function createTransaction(
 
   const parsedDate = parseLocalDateToMidday(data.dueDate);
   const total = Math.floor(data.installmentsCount || 1);
+  const card = await cardFor(data);
+  // Com cartão: a data digitada é a da compra; o vencimento é o da fatura em que cai
+  const cardFields = (k: number) => {
+    if (!card) return {};
+    const inv = invoiceFor(card, parsedDate, k);
+    return { creditCardId: card.id, purchaseDate: parsedDate, invoiceMonth: inv.invoiceMonth, dueDate: inv.dueDate };
+  };
+  const firstDue = card ? invoiceFor(card, parsedDate, 0).dueDate : parsedDate;
 
   if (data.isInstallment && total > 1) {
     const installmentId = randomUUID();
@@ -1547,6 +1564,7 @@ export async function createTransaction(
         installmentCurrent: i,
         installmentTotal: total,
         installmentId,
+        ...cardFields(i - current),
       });
     }
     await prisma.transaction.createMany({ data: records });
@@ -1563,12 +1581,13 @@ export async function createTransaction(
         paid: Boolean(data.paid),
         paidAt: data.paid ? new Date() : null,
         cardId: data.cardId || null,
+        ...cardFields(0),
       },
     });
   }
 
   revalidatePath("/");
-  return { success: true, year: parsedDate.getUTCFullYear(), month: parsedDate.getUTCMonth() };
+  return { success: true, year: firstDue.getUTCFullYear(), month: firstDue.getUTCMonth() };
 }
 
 export async function updateTransaction(id: string, data: TransactionInput, scope: TxScope = "one") {
@@ -1578,6 +1597,48 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
 
   const parsedDate = parseLocalDateToMidday(data.dueDate);
   const description = data.description.trim();
+  const card = await cardFor(data);
+
+  if (card) {
+    // Cartão: a data é a da compra; cada parcela anda uma fatura a partir da primeira do grupo
+    const group = current.installmentId
+      ? await prisma.transaction.findMany({ where: { installmentId: current.installmentId } })
+      : [current];
+    const firstParcel = Math.min(...group.map((g) => g.installmentCurrent ?? 1));
+    const targets = !current.installmentId || scope === "one"
+      ? [current]
+      : group.filter((g) => scope === "all" || (g.installmentCurrent ?? 0) >= (current.installmentCurrent ?? 0));
+    const base = stripInstallmentSuffix(description);
+    await prisma.$transaction(
+      targets.map((t) => {
+        const inv = invoiceFor(card, parsedDate, (t.installmentCurrent ?? 1) - firstParcel);
+        return prisma.transaction.update({
+          where: { id: t.id },
+          data: {
+            description: t.isInstallment ? `${base} (${t.installmentCurrent}/${t.installmentTotal})` : description,
+            amount: round2(data.amount),
+            type: data.type,
+            category: data.category,
+            paymentMethod: data.paymentMethod,
+            notes: data.notes || null,
+            creditCardId: card.id,
+            purchaseDate: parsedDate,
+            invoiceMonth: inv.invoiceMonth,
+            dueDate: inv.dueDate,
+            ...(t.id === id && data.paid !== undefined
+              ? { paid: data.paid, paidAt: data.paid ? current.paidAt ?? new Date() : null }
+              : {}),
+          },
+        });
+      })
+    );
+    const due = invoiceFor(card, parsedDate, (current.installmentCurrent ?? 1) - firstParcel).dueDate;
+    revalidatePath("/");
+    return { success: true, year: due.getUTCFullYear(), month: due.getUTCMonth() };
+  }
+
+  // Saiu do cartão: limpa os campos de fatura
+  const clearCard = current.creditCardId ? { creditCardId: null, purchaseDate: null, invoiceMonth: null } : {};
 
   if (current.isInstallment && current.installmentId && scope !== "one") {
     const base = stripInstallmentSuffix(description);
@@ -1600,6 +1661,7 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
             paymentMethod: data.paymentMethod,
             dueDate: new Date(s.dueDate.getTime() + shiftMs),
             notes: data.notes || null,
+            ...clearCard,
             ...(s.id === id && data.paid !== undefined
               ? { paid: data.paid, paidAt: data.paid ? current.paidAt ?? new Date() : null }
               : {}),
@@ -1618,6 +1680,7 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
         paymentMethod: data.paymentMethod,
         dueDate: parsedDate,
         notes: data.notes || null,
+        ...clearCard,
         ...(data.cardId !== undefined ? { cardId: data.cardId || null } : {}),
         ...(data.paid !== undefined
           ? { paid: data.paid, paidAt: data.paid ? current.paidAt ?? new Date() : null }
@@ -1926,6 +1989,116 @@ export async function getFinanceSnapshot(yearArg?: number, monthArg?: number) {
   };
 }
 
+// ---------- CARTÕES DE CRÉDITO ----------
+
+export async function listCreditCards() {
+  await requireAuth();
+  return prisma.creditCard.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
+}
+
+export async function saveCreditCard(data: {
+  id?: string; name: string; closingDay: number; dueDay: number; limit?: number | null; color?: string; active?: boolean;
+}) {
+  await requireAuth();
+  const name = data.name.trim();
+  if (!name) throw new Error("Dê um nome ao cartão.");
+  const day = (n: number) => Math.min(Math.max(Math.round(n || 1), 1), 31);
+  const fields = {
+    name,
+    closingDay: day(data.closingDay),
+    dueDay: day(data.dueDay),
+    limit: data.limit && data.limit > 0 ? round2(data.limit) : null,
+    ...(data.color ? { color: data.color } : {}),
+    ...(data.active !== undefined ? { active: data.active } : {}),
+  };
+  if (data.id) await prisma.creditCard.update({ where: { id: data.id }, data: fields });
+  else await prisma.creditCard.create({ data: fields });
+  revalidatePath("/");
+}
+
+export async function deleteCreditCard(id: string) {
+  await requireAuth();
+  await prisma.creditCard.delete({ where: { id } }); // compras ficam, só sem cartão
+  revalidatePath("/");
+}
+
+/**
+ * Painel dos cartões: limite usado e faturas (2 meses pra trás até o fim do que tem lançado),
+ * cada uma com as compras, total e situação.
+ */
+export async function getCreditCardsOverview() {
+  await requireAuth();
+  const cards = await prisma.creditCard.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
+  if (cards.length === 0) return [];
+  const today = todayMidday();
+  const fromKey = monthKey(today.getUTCFullYear(), today.getUTCMonth() - 2);
+
+  const [txs, openSums] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { creditCardId: { in: cards.map((c) => c.id) }, invoiceMonth: { gte: fromKey } },
+      orderBy: [{ purchaseDate: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true, description: true, amount: true, type: true, paid: true, category: true, notes: true,
+        purchaseDate: true, dueDate: true, invoiceMonth: true, creditCardId: true,
+        isInstallment: true, installmentCurrent: true, installmentTotal: true, installmentId: true,
+      },
+    }),
+    prisma.transaction.groupBy({
+      by: ["creditCardId", "type"],
+      where: { creditCardId: { in: cards.map((c) => c.id) }, paid: false },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  return cards.map((card) => {
+    const mine = txs.filter((t) => t.creditCardId === card.id);
+    const open = openSums.filter((o) => o.creditCardId === card.id);
+    const used = round2(
+      open.reduce((s, o) => s + (o.type === "INCOME" ? -1 : 1) * (o._sum.amount ?? 0), 0)
+    );
+    // Fatura que está aberta hoje (onde cai uma compra feita hoje)
+    const currentKey = invoiceFor(card, today, 0).invoiceMonth;
+    const keys = [...new Set([...mine.map((t) => t.invoiceMonth!), currentKey])].sort();
+
+    const invoices = keys.map((key) => {
+      const items = mine.filter((t) => t.invoiceMonth === key);
+      const total = round2(items.reduce((s, t) => s + (t.type === "INCOME" ? -t.amount : t.amount), 0));
+      const unpaid = items.filter((t) => !t.paid);
+      const dueDate = invoiceDueDate(card, key);
+      const closingDate = invoiceClosingDate(card, key);
+      const paid = items.length > 0 && unpaid.length === 0;
+      const status = paid
+        ? "PAGA"
+        : dueDate < today
+          ? "ATRASADA"
+          : closingDate <= today
+            ? "FECHADA"
+            : key === currentKey
+              ? "ABERTA"
+              : "FUTURA";
+      return { key, dueDate, closingDate, total, paid, status, items, isCurrent: key === currentKey };
+    });
+
+    return {
+      ...card,
+      used,
+      available: card.limit ? round2(card.limit - used) : null,
+      currentKey,
+      invoices,
+    };
+  });
+}
+
+/** Paga (ou reabre) a fatura inteira de um mês. */
+export async function payInvoice(creditCardId: string, invoiceMonth: string, paid = true) {
+  await requireAuth();
+  await prisma.transaction.updateMany({
+    where: { creditCardId, invoiceMonth, paid: !paid },
+    data: { paid, paidAt: paid ? new Date() : null },
+  });
+  revalidatePath("/");
+}
+
 // ---------- IMPORTAÇÃO DE EXTRATO / FATURA ----------
 
 export interface ImportRowInput {
@@ -1988,10 +2161,43 @@ export async function analyzeImport(rows: ImportRowInput[]) {
 
 export async function importTransactions(
   items: (ImportRowInput & { category: string })[],
-  opts: { paymentMethod: PayMethod; paid: boolean; dueDate?: string | null }
+  opts: {
+    paymentMethod: PayMethod;
+    paid: boolean;
+    dueDate?: string | null;
+    /** Fatura de cartão: compras entram no cartão; `invoiceMonth` força todas numa fatura */
+    creditCardId?: string | null;
+    invoiceMonth?: string | null;
+  }
 ) {
   await requireAuth();
   if (items.length === 0) return { created: 0 };
+  const card = opts.creditCardId ? await prisma.creditCard.findUnique({ where: { id: opts.creditCardId } }) : null;
+  if (card) {
+    await prisma.transaction.createMany({
+      data: items.map((r) => {
+        const purchase = parseLocalDateToMidday(r.date);
+        const inv = opts.invoiceMonth
+          ? { invoiceMonth: opts.invoiceMonth, dueDate: invoiceDueDate(card, opts.invoiceMonth) }
+          : invoiceFor(card, purchase, 0);
+        return {
+          description: r.description.trim().slice(0, 200) || "Importado",
+          amount: round2(r.amount),
+          type: r.type,
+          category: r.category || "Geral",
+          paymentMethod: "CREDIT_CARD",
+          creditCardId: card.id,
+          purchaseDate: purchase,
+          invoiceMonth: inv.invoiceMonth,
+          dueDate: inv.dueDate,
+          paid: false,
+          notes: "Importado da fatura",
+        };
+      }),
+    });
+    revalidatePath("/");
+    return { created: items.length };
+  }
   const fixedDue = opts.dueDate ? parseLocalDateToMidday(opts.dueDate) : null;
   await prisma.transaction.createMany({
     data: items.map((r) => ({

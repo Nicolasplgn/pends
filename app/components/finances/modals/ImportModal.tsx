@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Module } from "@prisma/client";
 import { X, Upload, FileText, AlertTriangle, Sparkles, CreditCard, Landmark } from "lucide-react";
-import { analyzeImport, importTransactions } from "@/app/actions";
+import { analyzeImport, importTransactions, listCreditCards } from "@/app/actions";
+import { invoiceFor, invoiceLabel, monthKey } from "@/lib/invoice";
 import type { PayMethod } from "../../../types";
 import { PAY_METHOD_LABEL } from "../../../types";
 import { parseStatement, flipTypes, type ParsedRow } from "../importParser";
@@ -31,6 +32,27 @@ export function ImportModal({ isOpen, onClose, onImported, modules }: Props) {
   const [mode, setMode] = useState<"ACCOUNT" | "CARD">("ACCOUNT");
   const [method, setMethod] = useState<PayMethod>("PIX");
   const [invoiceDue, setInvoiceDue] = useState("");
+  const [cards, setCards] = useState<Awaited<ReturnType<typeof listCreditCards>>>([]);
+  const [creditCardId, setCreditCardId] = useState("");
+  // "" = cada compra cai na fatura pela data dela · "2026-12" = tudo nessa fatura
+  const [invoiceMonth, setInvoiceMonth] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let alive = true;
+    listCreditCards()
+      .then((list) => {
+        if (!alive) return;
+        const active = list.filter((c) => c.active);
+        setCards(active);
+        setCreditCardId((id) => id || active[0]?.id || "");
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isOpen]);
+
+  const now = new Date();
+  const monthOptions = Array.from({ length: 8 }, (_, i) => monthKey(now.getFullYear(), now.getMonth() - 2 + i));
   const [busy, setBusy] = useState(false);
 
   const defaultCat = modules[0]?.title ?? "Geral";
@@ -99,6 +121,8 @@ export function ImportModal({ isOpen, onClose, onImported, modules }: Props) {
           // Extrato da conta = já aconteceu. Fatura = a pagar no vencimento.
           paid: mode === "ACCOUNT",
           dueDate: mode === "CARD" && invoiceDue ? invoiceDue : null,
+          creditCardId: mode === "CARD" && creditCardId ? creditCardId : null,
+          invoiceMonth: mode === "CARD" && creditCardId && invoiceMonth ? invoiceMonth : null,
         }
       );
       onImported(res.created);
@@ -189,7 +213,48 @@ export function ImportModal({ isOpen, onClose, onImported, modules }: Props) {
                 </select>
               </div>
 
-              {mode === "CARD" ? (
+              {mode === "CARD" && cards.length > 0 ? (
+                <div className="space-y-2 text-[11px] text-slate-400 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>Cartão:</span>
+                    {cards.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setCreditCardId(c.id)}
+                        className={`px-2.5 py-1 rounded-lg border text-xs cursor-pointer ${
+                          creditCardId === c.id ? "text-white bg-slate-800 font-bold" : "border-slate-800 text-slate-400"
+                        }`}
+                        style={{ borderColor: creditCardId === c.id ? c.color : undefined }}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>Fatura:</span>
+                    <select
+                      value={invoiceMonth}
+                      onChange={(e) => setInvoiceMonth(e.target.value)}
+                      className="bg-[#050811] border border-slate-700 rounded px-2 py-1 text-white text-xs outline-none"
+                    >
+                      <option value="">Pela data de cada compra</option>
+                      {monthOptions.map((k) => <option key={k} value={k}>Tudo na fatura de {invoiceLabel(k)}</option>)}
+                    </select>
+                  </div>
+                  <p>
+                    Compras entram <b className="text-amber-300">a pagar</b> no cartão. Se o arquivo é a fatura de um mês só, escolha o mês
+                    (assim parcelas antigas que aparecem nela não vão pra fatura errada).
+                    {!invoiceMonth && rows[0] && cards.find((c) => c.id === creditCardId) && (
+                      <> Ex.: compra de {fmtDate(`${rows[0].date}T12:00:00Z`)} cai em{" "}
+                        <b className="text-amber-200">
+                          {invoiceLabel(invoiceFor(cards.find((c) => c.id === creditCardId)!, new Date(`${rows[0].date}T12:00:00Z`)).invoiceMonth)}
+                        </b>.
+                      </>
+                    )}
+                  </p>
+                </div>
+              ) : mode === "CARD" ? (
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
                   Compras entram <b className="text-amber-300">a pagar</b>. Vencimento da fatura:
                   <input
