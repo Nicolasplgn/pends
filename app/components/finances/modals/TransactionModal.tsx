@@ -334,7 +334,11 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
                           onChange={(e) => setInvoiceMonth(e.target.value)}
                           className="bg-[#050811] border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none"
                         >
-                          <option value="">Automática pela data ({invoiceLabel(cardPreview.auto.invoiceMonth)})</option>
+                          <option value="">
+                            {isEdit && initialData?.invoiceMonth
+                              ? `Manter onde está (${invoiceLabel(initialData.invoiceMonth)}), só muda se mudar a data`
+                              : `Automática pela data (${invoiceLabel(cardPreview.auto.invoiceMonth)})`}
+                          </option>
                           {invoiceOptions.map((k) => <option key={k} value={k}>{invoiceLabel(k)}</option>)}
                         </select>
                       </label>

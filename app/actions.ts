@@ -1613,6 +1613,17 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
   const card = await cardFor(data);
 
   if (card) {
+    // Editar não muda a fatura sozinho (vale até para telas antigas que não mandam a fatura):
+    // só recalcula se a data da compra mudou de verdade, ou se trocou de cartão.
+    // Saldo de fatura (sem data de compra) fica sempre onde está.
+    if (!data.invoiceMonth && current.invoiceMonth && current.creditCardId === card.id) {
+      const sameDay = (a: Date | null, b: Date) =>
+        !!a && a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
+      const purchaseChanged = current.purchaseDate ? !sameDay(current.purchaseDate, parsedDate) : false;
+      if (!purchaseChanged) data = { ...data, invoiceMonth: current.invoiceMonth };
+    }
+    // Lançamento sem data de compra (ex.: saldo da fatura) continua sem ela ao editar
+    const keepNoPurchase = !current.purchaseDate && data.invoiceMonth === current.invoiceMonth;
     // Cartão: a data é a da compra; cada parcela anda uma fatura a partir da primeira do grupo
     const group = current.installmentId
       ? await prisma.transaction.findMany({ where: { installmentId: current.installmentId } })
@@ -1638,7 +1649,7 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
             paymentMethod: data.paymentMethod,
             notes: data.notes || null,
             creditCardId: card.id,
-            purchaseDate: parsedDate,
+            purchaseDate: keepNoPurchase ? null : parsedDate,
             invoiceMonth: inv.invoiceMonth,
             dueDate: inv.dueDate,
             ...(t.id === id && data.paid !== undefined
