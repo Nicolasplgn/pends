@@ -204,7 +204,7 @@ export function CardPlanning({ card, projects, columns, onChanged }: Props) {
                 setNewItem("");
               }
             }}
-            placeholder="Novo item e Enter (ex.: testar na tela, enviar ao Sirlovani)"
+            placeholder="Novo item e Enter (ex.: testar na tela, enviar pra revisão)"
             className={input}
           />
           <button

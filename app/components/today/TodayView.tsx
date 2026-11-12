@@ -10,7 +10,7 @@ import type { FinanceTx, TodayOverview } from "../../types";
 import { MONTH_NAMES, PAY_METHOD_LABEL } from "../../types";
 import { brl, daysUntil, fmtDate } from "../finances/format";
 
-/** Valor redondo para os quadros (cabe no celular): R$ 982 · R$ 4.125 */
+/** Valor redondo para os quadros (cabe no celular): R$ 980 · R$ 1.250 */
 const brlRound = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 import { TransactionModal, type TxModalDefaults } from "../finances/modals/TransactionModal";
 

@@ -49,7 +49,7 @@ export function ProjectsModal({ isOpen, onClose, projects, onChanged }: Props) {
           <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer" aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3 overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          <p className="text-[11px] text-slate-500 font-mono">Cliente ou frente de trabalho (Wave, Gambine…). Cada card pode ter um projeto, e o relatório sai por projeto.</p>
+          <p className="text-[11px] text-slate-500 font-mono">Cliente ou frente de trabalho (ex.: Cliente A, Projeto B…). Cada card pode ter um projeto, e o relatório sai por projeto.</p>
 
           {projects.map((p) =>
             editing === p.id ? (
