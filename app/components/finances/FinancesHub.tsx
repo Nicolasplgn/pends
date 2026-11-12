@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Module } from "@prisma/client";
 import {
   Plus, LayoutDashboard, ListFilter, Repeat, Layers, ArrowUpRight, ArrowDownRight,
-  AlertTriangle, Send, Wallet, Gauge, Loader2, Target, Upload,
+  AlertTriangle, Send, Wallet, Gauge, Loader2, Target, Upload, CreditCard,
 } from "lucide-react";
 import {
   getFinanceOverview, toggleTransactionPaid, setTransactionsPaid, launchRecurringForMonth,
@@ -25,10 +25,11 @@ import { DeleteTxModal } from "./modals/DeleteTxModal";
 import { RecurringModal } from "./modals/RecurringModal";
 import { ImportModal } from "./modals/ImportModal";
 import { FinanceGoals } from "./FinanceGoals";
+import { FinanceCards } from "./FinanceCards";
 import { brl } from "./format";
 import { Bar } from "./ui";
 
-type Tab = "overview" | "ledger" | "fixed" | "installments" | "goals";
+type Tab = "overview" | "cards" | "ledger" | "fixed" | "installments" | "goals";
 
 interface FinancesHubProps {
   modules: Module[];
@@ -59,6 +60,8 @@ export function FinancesHub({
   const [deleteRec, setDeleteRec] = useState<Recurring | null>(null);
   const [deleteGroup, setDeleteGroup] = useState<FinanceInstallmentGroup | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  // Aba Cartões recarrega quando um lançamento é salvo/excluído/importado
+  const [cardsVersion, setCardsVersion] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,6 +174,7 @@ export function FinancesHub({
 
   function handleSaved(target: { year: number; month: number }, message: string) {
     setToast(message);
+    setCardsVersion((v) => v + 1);
     if (target.year !== selectedYear || target.month !== selectedMonth) {
       onSelectMonthYear(target.month, target.year);
     } else {
@@ -185,6 +189,7 @@ export function FinancesHub({
 
   const TABS: [Tab, string, React.ReactNode, number?][] = [
     ["overview", "Visão geral", <LayoutDashboard size={14} key="o" />],
+    ["cards", "Cartões", <CreditCard size={14} key="c" />],
     ["ledger", "Lançamentos", <ListFilter size={14} key="l" />, data?.transactions.length],
     ["fixed", "Contas fixas", <Repeat size={14} key="f" />, data?.recurring.length],
     ["installments", "Parcelas", <Layers size={14} key="i" />, data?.installments.length],
@@ -392,6 +397,18 @@ export function FinancesHub({
                   void load();
                 }}
                 onLaunch={(ids) => void handleLaunch(ids)}
+              />
+            )}
+            {tab === "cards" && (
+              <FinanceCards
+                refreshKey={cardsVersion}
+                onNewPurchase={(creditCardId) =>
+                  setTxModal({ open: true, tx: null, defaults: { type: "EXPENSE", paymentMethod: "CREDIT_CARD", creditCardId } })
+                }
+                onChanged={(msg) => {
+                  setToast(msg);
+                  void load();
+                }}
               />
             )}
             {tab === "goals" && (

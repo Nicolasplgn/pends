@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Module } from "@prisma/client";
 import { X, ArrowDownRight, ArrowUpRight, Layers, CheckCircle2, Trash2, Kanban, Clock } from "lucide-react";
-import { createTransaction, updateTransaction, type TxScope } from "@/app/actions";
+import { createTransaction, listCreditCards, updateTransaction, type TxScope } from "@/app/actions";
+import { invoiceFor, invoiceLabel } from "@/lib/invoice";
 import type { FinanceTx, PayMethod, TxType } from "../../../types";
 import { PAY_METHOD_LABEL } from "../../../types";
 import { brl, moneyToInput, parseMoney, toInputDate, todayInputDate } from "../format";
@@ -12,7 +13,11 @@ import { MethodIcon } from "../ui";
 export interface TxModalDefaults {
   type?: TxType;
   dueDate?: string;
+  paymentMethod?: PayMethod;
+  creditCardId?: string;
 }
+
+type CardOption = Awaited<ReturnType<typeof listCreditCards>>[number];
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -39,6 +44,8 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
   const [dueDate, setDueDate] = useState("");
   const [category, setCategory] = useState("");
   const [method, setMethod] = useState<PayMethod>("PIX");
+  const [cards, setCards] = useState<CardOption[]>([]);
+  const [creditCardId, setCreditCardId] = useState("");
   // Status automático: data de hoje/passada = pago; data futura = a pagar.
   // Só vira manual se a pessoa tocar em "mudar".
   const [paidOverride, setPaidOverride] = useState<boolean | null>(null);
@@ -62,9 +69,11 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
       setType(initialData.type as TxType);
       setDescription(initialData.description.replace(/\s*\(\d+\/\d+\)\s*$/, ""));
       setAmount(moneyToInput(initialData.amount));
-      setDueDate(toInputDate(initialData.dueDate));
+      // No cartão o campo mostra a data da compra (o vencimento vem da fatura)
+      setDueDate(toInputDate(initialData.purchaseDate ?? initialData.dueDate));
       setCategory(initialData.category);
       setMethod((initialData.paymentMethod as PayMethod) || "PIX");
+      setCreditCardId(initialData.creditCardId ?? "");
       setPaidOverride(initialData.paid);
       setNotes(initialData.notes ?? "");
       setIsInstallment(initialData.isInstallment);
@@ -74,7 +83,8 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
       setAmount("");
       setDueDate(defaults?.dueDate ?? todayInputDate());
       setCategory(modules[0]?.title ?? "Geral");
-      setMethod("PIX");
+      setMethod(defaults?.paymentMethod ?? "PIX");
+      setCreditCardId(defaults?.creditCardId ?? "");
       setPaidOverride(null);
       setNotes("");
       setIsInstallment(false);
@@ -87,12 +97,37 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
 
   useEffect(() => {
     if (!isOpen) return;
+    let alive = true;
+    listCreditCards()
+      .then((list) => {
+        if (!alive) return;
+        const active = list.filter((c) => c.active);
+        setCards(active);
+        setCreditCardId((id) => id || active[0]?.id || "");
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
-  const autoPaid = !!dueDate && dueDate <= todayInputDate();
+  const onCard = method === "CREDIT_CARD" && !!creditCardId;
+  const selectedCard = cards.find((c) => c.id === creditCardId) ?? null;
+  // Compra no cartão fica "a pagar" até pagar a fatura; o resto segue a data
+  const autoPaid = onCard ? false : !!dueDate && dueDate <= todayInputDate();
+  const cardPreview = useMemo(() => {
+    if (!onCard || !selectedCard || !dueDate) return null;
+    const purchase = new Date(`${dueDate}T12:00:00Z`);
+    const n = isInstallment && !isEdit ? Math.max(installments - startAt + 1, 1) : 1;
+    const first = invoiceFor(selectedCard, purchase, 0);
+    const last = invoiceFor(selectedCard, purchase, n - 1);
+    return { first, last, n };
+  }, [onCard, selectedCard, dueDate, isInstallment, isEdit, installments, startAt]);
   const paid = paidOverride ?? autoPaid;
   const parsedAmount = parseMoney(amount);
   const preview = useMemo(() => {
@@ -118,6 +153,7 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
         type,
         category: category || "Geral",
         paymentMethod: method,
+        creditCardId: onCard ? creditCardId : null,
         dueDate,
         notes: notes.trim() || null,
         paid,
@@ -211,7 +247,7 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
               </div>
             </div>
             <div>
-              <label className={labelCls}>{isInstallment && !isEdit ? "1ª parcela em" : "Vencimento"}</label>
+              <label className={labelCls}>{onCard ? "Data da compra" : isInstallment && !isEdit ? "1ª parcela em" : "Vencimento"}</label>
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${inputCls} scheme-dark`} />
             </div>
           </div>
@@ -255,6 +291,40 @@ export function TransactionModal({ isOpen, onClose, onSaved, initialData, defaul
                 </button>
               ))}
             </div>
+            {method === "CREDIT_CARD" && (
+              <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
+                {cards.length === 0 ? (
+                  <p className="text-[11px] text-amber-300">
+                    Nenhum cartão cadastrado. Cadastre em Finanças → Cartões pra a compra cair na fatura certa.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cards.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setCreditCardId(c.id)}
+                          className={`px-2.5 py-1 rounded-lg border text-xs cursor-pointer ${
+                            creditCardId === c.id ? "text-white bg-slate-800 font-bold" : "border-slate-800 text-slate-400"
+                          }`}
+                          style={{ borderColor: creditCardId === c.id ? c.color : undefined }}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                    {cardPreview && (
+                      <p className="text-[11px] font-mono text-amber-200">
+                        {cardPreview.n > 1
+                          ? <>Parcelas de <b>{invoiceLabel(cardPreview.first.invoiceMonth)}</b> a <b>{invoiceLabel(cardPreview.last.invoiceMonth)}</b> (1ª vence {cardPreview.first.dueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })})</>
+                          : <>Cai na fatura de <b>{invoiceLabel(cardPreview.first.invoiceMonth)}</b>, que vence {cardPreview.first.dueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })}</>}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {!isEdit && (
