@@ -8,7 +8,7 @@ import { randomUUID } from "crypto";
 import {
   SESSION_COOKIE, SESSION_MAX_AGE_S, createSessionToken, credentialsMatch, isAuthenticated, requireAuth,
 } from "../lib/session";
-import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey } from "../lib/invoice";
+import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey, shiftMonthKey } from "../lib/invoice";
 
 const CURRENT_USER = "Nicolas";
 
@@ -1497,6 +1497,19 @@ export interface TransactionInput {
   cardId?: string | null;
   /** Cartão de crédito: com ele, `dueDate` é a DATA DA COMPRA e o vencimento sai da fatura */
   creditCardId?: string | null;
+  /** Fatura escolhida à mão ("2026-12"). Vazio = calcula pela data da compra */
+  invoiceMonth?: string | null;
+}
+
+type CardCycleRow = { id: string; closingDay: number; dueDay: number };
+
+/** Fatura de uma parcela: a escolhida à mão (andando `k` meses) ou a calculada pela data. */
+function placeOnInvoice(card: CardCycleRow, purchase: Date, k: number, chosen?: string | null) {
+  if (chosen && /^\d{4}-\d{2}$/.test(chosen)) {
+    const key = shiftMonthKey(chosen, k);
+    return { invoiceMonth: key, dueDate: invoiceDueDate(card, key) };
+  }
+  return invoiceFor(card, purchase, k);
 }
 
 /** Cartão da compra (só se a forma for cartão e o cartão existir). */
@@ -1525,10 +1538,10 @@ export async function createTransaction(
   // Com cartão: a data digitada é a da compra; o vencimento é o da fatura em que cai
   const cardFields = (k: number) => {
     if (!card) return {};
-    const inv = invoiceFor(card, parsedDate, k);
+    const inv = placeOnInvoice(card, parsedDate, k, data.invoiceMonth);
     return { creditCardId: card.id, purchaseDate: parsedDate, invoiceMonth: inv.invoiceMonth, dueDate: inv.dueDate };
   };
-  const firstDue = card ? invoiceFor(card, parsedDate, 0).dueDate : parsedDate;
+  const firstDue = card ? placeOnInvoice(card, parsedDate, 0, data.invoiceMonth).dueDate : parsedDate;
 
   if (data.isInstallment && total > 1) {
     const installmentId = randomUUID();
@@ -1611,7 +1624,10 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
     const base = stripInstallmentSuffix(description);
     await prisma.$transaction(
       targets.map((t) => {
-        const inv = invoiceFor(card, parsedDate, (t.installmentCurrent ?? 1) - firstParcel);
+        // Fatura escolhida vale para a parcela editada; as outras andam a partir dela
+        const inv = data.invoiceMonth
+          ? placeOnInvoice(card, parsedDate, (t.installmentCurrent ?? 1) - (current.installmentCurrent ?? 1), data.invoiceMonth)
+          : invoiceFor(card, parsedDate, (t.installmentCurrent ?? 1) - firstParcel);
         return prisma.transaction.update({
           where: { id: t.id },
           data: {
@@ -1632,7 +1648,9 @@ export async function updateTransaction(id: string, data: TransactionInput, scop
         });
       })
     );
-    const due = invoiceFor(card, parsedDate, (current.installmentCurrent ?? 1) - firstParcel).dueDate;
+    const due = data.invoiceMonth
+      ? placeOnInvoice(card, parsedDate, 0, data.invoiceMonth).dueDate
+      : invoiceFor(card, parsedDate, (current.installmentCurrent ?? 1) - firstParcel).dueDate;
     revalidatePath("/");
     return { success: true, year: due.getUTCFullYear(), month: due.getUTCMonth() };
   }
@@ -2087,6 +2105,44 @@ export async function getCreditCardsOverview() {
       invoices,
     };
   });
+}
+
+const SALDO_PREFIX = "Saldo da fatura";
+
+/**
+ * "Ajustar total": você informa o total que o banco mostra e o Pends acerta uma linha
+ * de saldo ("Saldo da fatura (ajuste)") para a fatura bater, sem mexer nas compras lançadas.
+ */
+export async function setInvoiceTotal(creditCardId: string, invoiceMonth: string, total: number) {
+  await requireAuth();
+  const card = await prisma.creditCard.findUnique({ where: { id: creditCardId } });
+  if (!card || !/^\d{4}-\d{2}$/.test(invoiceMonth)) throw new Error("Fatura inválida.");
+  const items = await prisma.transaction.findMany({ where: { creditCardId, invoiceMonth }, orderBy: { createdAt: "asc" } });
+  const saldo = items.filter((t) => t.description.startsWith(SALDO_PREFIX));
+  const others = items.filter((t) => !t.description.startsWith(SALDO_PREFIX));
+  const othersTotal = others.reduce((s, t) => s + (t.type === "INCOME" ? -t.amount : t.amount), 0);
+  const diff = round2(total - othersTotal);
+  const [keep, ...extra] = saldo;
+
+  if (extra.length) await prisma.transaction.deleteMany({ where: { id: { in: extra.map((t) => t.id) } } });
+  if (Math.abs(diff) < 0.005) {
+    if (keep) await prisma.transaction.delete({ where: { id: keep.id } });
+  } else {
+    const fields = {
+      description: `${SALDO_PREFIX} (ajuste)`,
+      amount: Math.abs(diff),
+      type: diff > 0 ? "EXPENSE" : "INCOME",
+      paymentMethod: "CREDIT_CARD",
+      creditCardId,
+      invoiceMonth,
+      dueDate: invoiceDueDate(card, invoiceMonth),
+      notes: "Diferença entre o total do banco e as compras lançadas",
+    };
+    if (keep) await prisma.transaction.update({ where: { id: keep.id }, data: fields });
+    else await prisma.transaction.create({ data: { ...fields, category: "Contas de Casa", paid: false } });
+  }
+  revalidatePath("/");
+  return { saldo: diff };
 }
 
 /** Paga (ou reabre) a fatura inteira de um mês. */
