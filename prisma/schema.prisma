@@ -85,7 +85,7 @@ model Card {
   // Com quem está a pendência (vazio = comigo)
   assignee        String?
 
-  // Projeto/cliente (Wave, Gambine…)
+  // Projeto/cliente do card
   projectId       String?
   project         Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
 

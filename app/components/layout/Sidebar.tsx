@@ -182,7 +182,7 @@ export function Sidebar({
             <div className="w-8 h-8 rounded-xl bg-blue-950 border border-blue-800 flex items-center justify-center font-bold text-xs text-blue-300 font-mono">NP</div>
             <div className="text-xs">
               <div className="font-bold text-slate-200">Nicolas</div>
-              <div className="text-slate-500 truncate w-32 font-mono text-[10px]">trabalhonicolasplg...</div>
+              <div className="text-slate-500 truncate w-32 font-mono text-[10px]">sessão ativa</div>
             </div>
           </div>
           <button 
