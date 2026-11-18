@@ -4,20 +4,20 @@ import { useMemo, useState } from "react";
 import {
   Flame, Calendar, Circle, Zap, ArrowUpRight, AlertTriangle, ShieldAlert, Layers
 } from "lucide-react";
-import type { NeuralNode, NeuralCard } from "../../types";
+import type { NeuralNode } from "../../types";
 import { isCardOverdue } from "../../types";
 
 interface NeuralGridProps {
   moduleNodes: NeuralNode[];
   totalAllTasks: number;
   completedAllTasks: number;
-  allUrgentCards: NeuralCard[];
-  allOverdueCards: NeuralCard[];
   onSelectModule: (node: NeuralNode) => void;
   onToggleComplete: (cardId: string) => void;
   onCardClick?: (cardId: string) => void;
   onGoToPipeline?: (modId: string) => void;
   moduleSpend?: Record<string, { spent: number; budget: number | null }>;
+  /** Dentro de outra página (sem rolagem/padding próprios) */
+  embedded?: boolean;
 }
 
 // Calcula a diferença exata em dias entre hoje e o prazo
@@ -77,6 +77,7 @@ export function NeuralGrid({
   onCardClick,
   onGoToPipeline,
   moduleSpend,
+  embedded = false,
 }: NeuralGridProps) {
   const [heroFilter, setHeroFilter] = useState<"week" | "risk" | "urgent">("week");
 
@@ -133,7 +134,7 @@ export function NeuralGrid({
     heroFilter === "week" ? thisWeekCards : heroFilter === "risk" ? troubleCards : highPriorityCards;
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 bg-[#050811]">
+    <div className={embedded ? "space-y-6" : "flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 bg-[#050811]"}>
       
       {/* LINHA 1: BRIEFING TÁTICO DA SEMANA + RADAR DE PROBLEMAS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
