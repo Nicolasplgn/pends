@@ -296,7 +296,7 @@ export default function PendsApp() {
             <Menu size={20} />
           </button>
           <span className="font-bold text-sm uppercase tracking-wider font-mono text-white">
-            {activeTab === "today" ? "Hoje" : activeTab === "neural" ? "Visão Neural" : activeTab === "dashboard" ? "Analytics" : activeTab === "kanban" ? "Pipeline" : "Finanças & Gastos"}
+            {activeTab === "today" ? "Hoje" : activeTab === "neural" ? "Visão Neural" : activeTab === "dashboard" ? "Painel" : activeTab === "kanban" ? "Pipeline" : "Finanças & Gastos"}
           </span>
           <button
             onClick={() => setPaletteOpen(true)}
@@ -326,10 +326,8 @@ export default function PendsApp() {
         {activeTab === "neural" && (
           <NeuralView 
             modules={modules}
-            moduleSpend={financeSnap?.moduleSpend} 
-            columns={columns} 
+            columns={columns}
             onSelectModule={(modId: string) => { setActiveModuleFilter(modId); setActiveTab("kanban"); }}
-            onToggleComplete={async (cardId) => { await toggleCardCompletion(cardId); void loadAll(); }}
             onCardClick={(cardId) => setSelectedCardId(cardId)}
           />
         )}
@@ -347,6 +345,8 @@ export default function PendsApp() {
             onSelectMonthYear={(m, y) => { setSelectedMonth(m); setSelectedYear(y); }}
             onToggleComplete={async (cardId) => { await toggleCardCompletion(cardId); void loadAll(); }}
             onOpenFinances={() => setActiveTab("finances")}
+            onCardClick={(cardId) => setSelectedCardId(cardId)}
+            onGoToPipeline={(modId) => { setActiveModuleFilter(modId); setActiveTab("kanban"); }}
           />
         )}
 
@@ -395,7 +395,7 @@ export default function PendsApp() {
           ["kanban", "Pipeline", <Layout key="k" size={20} />],
           ["finances", "Finanças", <Wallet key="f" size={20} />],
           ["neural", "Neural", <Globe key="n" size={20} />],
-          ["dashboard", "Analytics", <Activity key="d" size={20} />],
+          ["dashboard", "Painel", <Activity key="d" size={20} />],
         ] as const).map(([tab, label, icon]) => (
           <button
             key={tab}

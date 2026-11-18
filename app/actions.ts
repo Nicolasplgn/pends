@@ -1572,17 +1572,18 @@ export async function getFinanceSnapshot(yearArg?: number, monthArg?: number) {
   const { year, month } = safeYearMonth(yearArg, monthArg);
   const histStart = monthRange(year, month - 5).start;
   const { start, end } = monthRange(year, month);
+  const outlookEnd = monthRange(year, month + 3).end;
 
   const [txs, modules] = await Promise.all([
     prisma.transaction.findMany({
-      where: { dueDate: { gte: histStart, lte: end } },
+      where: { dueDate: { gte: histStart, lte: outlookEnd } },
       select: { amount: true, type: true, paid: true, dueDate: true, category: true, description: true },
     }),
     prisma.module.findMany({ select: { id: true, title: true, budget: true } }),
   ]);
 
-  const history = Array.from({ length: 6 }).map((_, i) => {
-    const r = monthRange(year, month - 5 + i);
+  const monthTotals = (offset: number) => {
+    const r = monthRange(year, month + offset);
     const list = txs.filter((t) => t.dueDate >= r.start && t.dueDate <= r.end);
     const income = list.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
     const expense = list.filter((t) => t.type !== "INCOME").reduce((s, t) => s + t.amount, 0);
@@ -1593,7 +1594,10 @@ export async function getFinanceSnapshot(yearArg?: number, monthArg?: number) {
       expense: round2(expense),
       balance: round2(income - expense),
     };
-  });
+  };
+  const history = Array.from({ length: 6 }).map((_, i) => monthTotals(i - 5));
+  // Próximos 3 meses (contas e faturas já lançadas)
+  const outlook = [1, 2, 3].map((o) => monthTotals(o));
 
   const current = txs.filter((t) => t.dueDate >= start && t.dueDate <= end);
   const exp = current.filter((t) => t.type !== "INCOME");
@@ -1623,6 +1627,7 @@ export async function getFinanceSnapshot(yearArg?: number, monthArg?: number) {
       .slice(0, 5)
       .map((t) => ({ description: t.description, amount: t.amount, paid: t.paid })),
     history,
+    outlook,
     moduleSpend,
   };
 }

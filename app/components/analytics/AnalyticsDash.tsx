@@ -14,6 +14,8 @@ import type { DashboardStats, FinanceSnapshot, KanbanColumn } from "../../types"
 import { MONTH_NAMES, isCardOverdue } from "../../types";
 import { ExecutiveReportModal } from "./ExecutiveReportModal";
 import { DateNavigator } from "../shared/DateNavigator";
+import { PulseChart } from "./PulseChart";
+import { ModulesPanel } from "./ModulesPanel";
 
 interface AnalyticsDashProps {
   stats: DashboardStats | null;
@@ -27,6 +29,8 @@ interface AnalyticsDashProps {
   onSelectMonthYear?: (month: number, year: number) => void;
   onToggleComplete: (cardId: string) => void;
   onOpenFinances: () => void;
+  onCardClick?: (cardId: string) => void;
+  onGoToPipeline: (modId: string) => void;
 }
 
 // Helper: Calcula a diferença exata em dias
@@ -52,6 +56,8 @@ export function AnalyticsDash({
   onSelectMonthYear,
   onToggleComplete,
   onOpenFinances,
+  onCardClick,
+  onGoToPipeline,
 }: AnalyticsDashProps) {
   const [showReportModal, setShowReportModal] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState<"urgent" | "overdue" | "all">("urgent");
@@ -230,14 +236,14 @@ export function AnalyticsDash({
           <div className="flex items-center gap-2 mb-1.5">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
             <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 font-black">
-              GRAFANA INTELLIGENCE // LIVE
+              PAINEL // AO VIVO
             </span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Central de Controle & Telemetria
+            Painel Geral
           </h2>
           <p className="text-xs text-slate-400 font-sans mt-1">
-            Visão topográfica de fluxos, análise preditiva de prazos e auditoria de retenção.
+            Dinheiro, pendências e módulos num lugar só.
           </p>
         </div>
 
@@ -334,6 +340,19 @@ export function AnalyticsDash({
           </div>
         </div>
       </div>
+
+      {/* PULSO: DINHEIRO + PENDÊNCIAS MÊS A MÊS */}
+      <PulseChart finance={finance} columns={columns} selectedMonth={selectedMonth} selectedYear={selectedYear} />
+
+      {/* PAINEL MODULAR (veio da Visão Neural) */}
+      <ModulesPanel
+        modules={modules}
+        columns={columns}
+        moduleSpend={finance?.moduleSpend}
+        onToggleComplete={onToggleComplete}
+        onCardClick={onCardClick}
+        onGoToPipeline={onGoToPipeline}
+      />
 
       {/* BLOCO 2: TOPOGRAFIA DO PIPELINE E MATRIZ DE PRIORIDADE */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

@@ -92,7 +92,7 @@ export function Sidebar({
               activeTab === "dashboard" ? "bg-blue-600/20 text-blue-400 border border-blue-500/30" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
             }`}
           >
-            <Activity size={16}/> Analytics Dash
+            <Activity size={16}/> Painel &amp; Módulos
           </button>
           <button 
             type="button" 
