@@ -12,7 +12,7 @@ export const SESSION_MAX_AGE_S = 60 * 60 * 24 * 30; // 30 dias
  * Segredo da assinatura. Use AUTH_SECRET (recomendado); se não existir, deriva das
  * credenciais — trocar a senha derruba todas as sessões abertas.
  */
-function sessionSecret(): string | null {
+export function sessionSecret(): string | null {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
   const { AUTH_EMAIL, AUTH_PASSWORD } = process.env;
   if (AUTH_EMAIL && AUTH_PASSWORD) {
@@ -70,3 +70,40 @@ export async function requireAuth(): Promise<void> {
     throw new Error("Sessão expirada ou inválida. Faça login novamente.");
   }
 }
+
+
+// ---------- Login com limitador (usado pelo app e pela tela de login do OAuth) ----------
+
+const loginFailures = new Map<string, { count: number; until: number }>();
+
+export type LoginResult = { ok: true; token: string } | { ok: false; error: string };
+
+/** Confere credenciais com atraso fixo e bloqueio de 5 min após 5 erros seguidos. */
+export async function attemptLogin(email: string, pass: string): Promise<LoginResult> {
+  if (!process.env.AUTH_EMAIL || !process.env.AUTH_PASSWORD) {
+    return { ok: false, error: "Variáveis de ambiente AUTH_EMAIL ou AUTH_PASSWORD não foram configuradas no servidor." };
+  }
+  const key = email.trim().toLowerCase() || "_";
+  const fail = loginFailures.get(key);
+  if (fail && fail.until > Date.now()) {
+    return { ok: false, error: "Muitas tentativas. Aguarde alguns minutos e tente de novo." };
+  }
+  if (credentialsMatch(email, pass)) {
+    loginFailures.delete(key);
+    const token = createSessionToken();
+    if (!token) return { ok: false, error: "Falha ao criar sessão." };
+    return { ok: true, token };
+  }
+  const count = (fail?.count ?? 0) + 1;
+  loginFailures.set(key, { count, until: count >= 5 ? Date.now() + 5 * 60_000 : 0 });
+  await new Promise((r) => setTimeout(r, 600));
+  return { ok: false, error: "Credenciais inválidas. Verifique usuário e senha." };
+}
+
+export const sessionCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: SESSION_MAX_AGE_S,
+};
