@@ -20,7 +20,7 @@ export function FinanceRecurring({ recurring, month, onCreate, onEdit, onDelete,
   const active = recurring.filter((r) => r.active);
   const fixedExpense = active.filter((r) => r.type !== "INCOME").reduce((s, r) => s + (r.amount || 0), 0);
   const fixedIncome = active.filter((r) => r.type === "INCOME").reduce((s, r) => s + (r.amount || 0), 0);
-  const pending = active.filter((r) => r.amount && !r.launchedTxId);
+  const pending = active.filter((r) => r.amount && !r.launchedTxId && !r.creditCardId);
 
   return (
     <div className="space-y-4">
