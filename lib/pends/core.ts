@@ -475,3 +475,51 @@ export function cardLimitWhere(today: Date) {
     OR: [{ recurringTaskId: null }, { purchaseDate: null }, { purchaseDate: { lte: today } }],
   };
 }
+
+/**
+ * Contas fixas no cartão (assinaturas): quando chega o dia da cobrança, lança a compra
+ * no cartão, na fatura certa. Uma vez por mês por conta; idempotente.
+ * Roda ao abrir o app e no cron diário.
+ */
+export async function spawnDueCardCharges(today: Date = todayMidday()) {
+  const recs = await prisma.recurringTask.findMany({
+    where: { kind: "FINANCE", active: true, paymentMethod: "CREDIT_CARD", creditCardId: { not: null }, amount: { gt: 0 } },
+    include: { creditCard: true, module: { select: { title: true } } },
+  });
+  if (recs.length === 0) return 0;
+
+  let created = 0;
+  for (const r of recs) {
+    if (!r.creditCard || !r.amount) continue;
+    const occ = routineOccurrence({ frequency: "MONTHLY", dueDay: r.dueDay, weekday: null }, today);
+    if (occ.date.getTime() > today.getTime()) continue; // ainda não caiu
+    // Não cria cobrança de um dia anterior à conta existir
+    const createdDay = Date.UTC(r.createdAt.getUTCFullYear(), r.createdAt.getUTCMonth(), r.createdAt.getUTCDate(), 12);
+    if (occ.date.getTime() < createdDay) continue;
+
+    const exists = await prisma.transaction.findFirst({
+      where: { recurringTaskId: r.id, purchaseDate: { gte: occ.start, lte: occ.end } },
+      select: { id: true },
+    });
+    if (exists) continue;
+
+    const { invoiceMonth, dueDate } = invoiceFor(r.creditCard, occ.date);
+    await prisma.transaction.create({
+      data: {
+        description: r.title,
+        amount: round2(r.amount),
+        type: r.type === "INCOME" ? "INCOME" : "EXPENSE",
+        category: r.module?.title ?? "Geral",
+        paymentMethod: "CREDIT_CARD",
+        dueDate,
+        paid: false,
+        creditCardId: r.creditCard.id,
+        purchaseDate: occ.date,
+        invoiceMonth,
+        recurringTaskId: r.id,
+      },
+    });
+    created++;
+  }
+  return created;
+}

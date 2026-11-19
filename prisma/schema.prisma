@@ -34,6 +34,10 @@ model RecurringTask {
   
   moduleId  String?
   module    Module?  @relation(fields: [moduleId], references: [id])
+
+  // Conta fixa no cartão: a cobrança é lançada sozinha no dia, nesse cartão
+  creditCardId String?
+  creditCard   CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
   
   cards        Card[]
   transactions Transaction[]
@@ -231,4 +235,5 @@ model CreditCard {
   active       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   transactions Transaction[]
+  recurring    RecurringTask[]
 }

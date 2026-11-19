@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { sendDailyDigest } from "@/lib/reminders";
+import { spawnDueCardCharges } from "@/lib/pends/core";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,9 @@ function authorized(req: Request) {
 export async function GET(req: Request) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
+    const charges = await spawnDueCardCharges(); // assinaturas no cartão que caem hoje
     const result = await sendDailyDigest();
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, charges });
   } catch (err) {
     console.error("Erro no cron de lembretes:", err);
     return NextResponse.json({ error: "internal" }, { status: 500 });

@@ -80,7 +80,7 @@ export function FinanceRecurring({ recurring, month, onCreate, onEdit, onDelete,
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-semibold text-slate-100 truncate">{r.title}</p>
                   <p className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                    <span className="flex items-center gap-1"><MethodIcon method={r.paymentMethod} /> {PAY_METHOD_LABEL[r.paymentMethod]}</span>
+                    <span className="flex items-center gap-1"><MethodIcon method={r.paymentMethod} /> {r.creditCardName ?? PAY_METHOD_LABEL[r.paymentMethod]}</span>
                     <span>{r.module?.title ?? "Sem módulo"}</span>
                     {!r.active && <span className="text-slate-400">pausada</span>}
                   </p>
@@ -94,6 +94,10 @@ export function FinanceRecurring({ recurring, month, onCreate, onEdit, onDelete,
                     <p className={`flex items-center justify-end gap-1 text-[10px] font-mono ${r.launchedPaid ? "text-emerald-500" : "text-amber-400"}`}>
                       {r.launchedPaid ? <CheckCircle2 size={10} /> : <Clock size={10} />}
                       {r.launchedPaid ? "paga no mês" : "lançada, em aberto"}
+                    </p>
+                  ) : r.active && r.creditCardId ? (
+                    <p className="text-[10px] font-mono text-violet-300" title="Entra sozinha no cartão no dia da cobrança">
+                      automática no dia {r.dueDay ?? "—"}
                     </p>
                   ) : r.active ? (
                     <button
