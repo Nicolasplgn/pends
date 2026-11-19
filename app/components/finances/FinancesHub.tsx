@@ -292,7 +292,7 @@ export function FinancesHub({
                   <Repeat size={15} className="text-sky-400 shrink-0" />
                   <span>
                     <b>{s.recurringPendingCount}</b> conta(s) fixa(s) ainda não lançada(s){" "}
-                    <span className="font-mono text-sky-300">({brl(s.recurringPendingExpense - s.recurringPendingIncome)})</span>
+                    <span className="font-mono text-sky-300">({brl(s.recurringLaunchableNet)})</span>
                   </span>
                 </span>
                 <button

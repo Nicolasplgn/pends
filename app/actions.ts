@@ -1095,7 +1095,14 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
       launchedAmount: launched?.amount ?? null,
     };
   });
-  const pendingRecurring = recurringStatus.filter((r) => r.active && r.amount && !r.launchedTxId);
+  // Conta fixa no cartão é lançada sozinha no dia da cobrança e cai na fatura seguinte:
+  // nunca pede "lançar" e só vira previsão em meses futuros (o mês atual já está na fatura).
+  const realNow = new Date();
+  const monthIsFuture = year * 12 + month > realNow.getFullYear() * 12 + realNow.getMonth();
+  const pendingRecurring = recurringStatus.filter(
+    (r) => r.active && r.amount && !r.launchedTxId && (!r.creditCardId || monthIsFuture)
+  );
+  const launchableRecurring = pendingRecurring.filter((r) => !r.creditCardId);
   const recurringPendingExpense = pendingRecurring.filter((r) => r.type !== "INCOME").reduce((s, r) => s + (r.amount || 0), 0);
   const recurringPendingIncome = pendingRecurring.filter((r) => r.type === "INCOME").reduce((s, r) => s + (r.amount || 0), 0);
 
@@ -1165,6 +1172,7 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
     // Contas fixas ativas ainda não lançadas naquele mês entram como previsão
     for (const rec of recurring) {
       if (!rec.active || !rec.amount || launchedIds.has(rec.id)) continue;
+      if (rec.creditCardId && py * 12 + pm <= realNow.getFullYear() * 12 + realNow.getMonth()) continue;
       if (i === 0 && recurringStatus.find((s) => s.id === rec.id)?.launchedTxId) continue;
       if (rec.type === "INCOME") income += rec.amount;
       else {
@@ -1258,7 +1266,10 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
       creditCardPending: round2(creditCardPending),
       recurringPendingExpense: round2(recurringPendingExpense),
       recurringPendingIncome: round2(recurringPendingIncome),
-      recurringPendingCount: pendingRecurring.length,
+      recurringPendingCount: launchableRecurring.length,
+      recurringLaunchableNet: round2(
+        launchableRecurring.reduce((s, r) => s + (r.type === "INCOME" ? -1 : 1) * (r.amount || 0), 0)
+      ),
       balancePlanned: round2(balancePlanned),
       balanceRealized: round2(balanceRealized),
       safeDailySpend,
