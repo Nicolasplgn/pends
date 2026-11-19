@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Module } from "@prisma/client";
 import { X, ArrowDownRight, ArrowUpRight } from "lucide-react";
-import { createRecurringTask, updateRecurringTask } from "@/app/actions";
+import { createRecurringTask, listCreditCards, updateRecurringTask } from "@/app/actions";
 import type { FinanceRecurring, PayMethod, TxType } from "../../../types";
 import { PAY_METHOD_LABEL } from "../../../types";
 import { moneyToInput, parseMoney } from "../format";
@@ -28,6 +28,8 @@ export function RecurringModal({ isOpen, onClose, onSaved, initialData, modules 
   const [dueDay, setDueDay] = useState("10");
   const [moduleId, setModuleId] = useState("");
   const [method, setMethod] = useState<PayMethod>("BOLETO");
+  const [cards, setCards] = useState<{ id: string; name: string }[]>([]);
+  const [creditCardId, setCreditCardId] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -40,7 +42,17 @@ export function RecurringModal({ isOpen, onClose, onSaved, initialData, modules 
     setDueDay(String(initialData?.dueDay ?? 10));
     setModuleId(initialData?.moduleId ?? modules[0]?.id ?? "");
     setMethod((initialData?.paymentMethod as PayMethod) ?? "BOLETO");
+    setCreditCardId(initialData?.creditCardId ?? "");
   }, [isOpen, initialData, modules]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let alive = true;
+    listCreditCards()
+      .then((list) => { if (alive) setCards(list.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name }))); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -58,6 +70,7 @@ export function RecurringModal({ isOpen, onClose, onSaved, initialData, modules 
         moduleId: moduleId || null,
         type,
         paymentMethod: method,
+        creditCardId: method === "CREDIT_CARD" ? creditCardId || null : null,
       };
       if (initialData) await updateRecurringTask(initialData.id, payload);
       else await createRecurringTask(payload);
@@ -147,6 +160,23 @@ export function RecurringModal({ isOpen, onClose, onSaved, initialData, modules 
               </div>
             </div>
           </div>
+
+          {method === "CREDIT_CARD" && (
+            <div>
+              <label className={labelCls}>Cartão</label>
+              <select value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)} className={inputCls}>
+                <option value="">Nenhum (lanço à mão)</option>
+                {cards.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {creditCardId
+                  ? "A cobrança entra sozinha nesse cartão no dia, na fatura certa. Até lá, aparece só como previsão."
+                  : "Escolha o cartão para a cobrança entrar sozinha todo mês."}
+              </p>
+            </div>
+          )}
 
           {error && <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">{error}</p>}
 

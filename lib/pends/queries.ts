@@ -4,7 +4,7 @@
 
 import { prisma } from "../prisma";
 import {
-  cardLimitWhere, createCardCore, createTransactionCore, getTodayOverviewCore, monthRange, round2, todayMidday,
+  cardLimitWhere, spawnDueCardCharges, createCardCore, createTransactionCore, getTodayOverviewCore, monthRange, round2, todayMidday,
   toggleCardCompletionCore, updateCardDetailsCore, type PayMethod, type TxType,
 } from "./core";
 
@@ -172,6 +172,7 @@ async function pickCreditCard(name?: string) {
 }
 
 export async function listCreditCards() {
+  await spawnDueCardCharges();
   const cards = await prisma.creditCard.findMany({ where: { active: true }, orderBy: { name: "asc" } });
   const open = await prisma.transaction.groupBy({
     by: ["creditCardId"],
@@ -269,6 +270,7 @@ export async function financeSummary(de?: string, ate?: string) {
 }
 
 export async function daySummary() {
+  await spawnDueCardCharges();
   const data = await getTodayOverviewCore();
   const today = todayMidday().getTime();
   const DAY = 86400000;

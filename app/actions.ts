@@ -9,7 +9,7 @@ import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey } from "../lib
 import {
   CURRENT_USER, parseLocalDateToMidday, round2, safeYearMonth, monthRange, todayMidday,
   stripInstallmentSuffix, txInclude, spawnDueRoutines, placeOnInvoice, cardFor,
-  completeLinkedCard, payLinkedTransactions, cardLimitWhere,
+  completeLinkedCard, payLinkedTransactions, cardLimitWhere, spawnDueCardCharges,
   getModulesCore, createCardCore, toggleCardCompletionCore, updateCardDetailsCore, createTransactionCore, getTodayOverviewCore,
   type TxType, type PayMethod, type TxScope, type TransactionInput,
 } from "../lib/pends/core";
@@ -141,6 +141,7 @@ export async function getBoardData() {
   await requireAuth();
   try {
     await spawnDueRoutines();
+    await spawnDueCardCharges();
     await runMaintenance();
     let board = await prisma.board.findFirst({
       include: boardInclude
@@ -819,6 +820,8 @@ export interface RecurringInput {
   type?: "INCOME" | "EXPENSE";
   paymentMethod?: PayMethod;
   active?: boolean;
+  /** Só vale no cartão: a cobrança passa a ser lançada sozinha no dia */
+  creditCardId?: string | null;
 }
 
 function cleanRecurring(data: RecurringInput) {
@@ -831,6 +834,9 @@ function cleanRecurring(data: RecurringInput) {
     ...(data.type ? { type: data.type } : {}),
     ...(data.paymentMethod ? { paymentMethod: data.paymentMethod } : {}),
     ...(data.active !== undefined ? { active: data.active } : {}),
+    ...(data.paymentMethod
+      ? { creditCardId: data.paymentMethod === "CREDIT_CARD" && data.creditCardId ? data.creditCardId : null }
+      : {}),
   };
 }
 
@@ -990,6 +996,7 @@ async function healBuggedDates() {
 /** Painel completo do mês: lançamentos, resumo, módulos, projeção, parcelas e contas fixas. */
 export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
   await requireAuth();
+  await spawnDueCardCharges();
   await healBuggedDates();
 
   const { year, month } = safeYearMonth(yearArg, monthArg);
@@ -1017,7 +1024,7 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
         })
       : Promise.resolve([]),
     prisma.module.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.recurringTask.findMany({ where: { kind: "FINANCE" }, include: { module: true }, orderBy: { dueDay: "asc" } }),
+    prisma.recurringTask.findMany({ where: { kind: "FINANCE" }, include: { module: true, creditCard: { select: { name: true } } }, orderBy: { dueDay: "asc" } }),
     prisma.transaction.findMany({
       where: { dueDate: { gte: projStart, lte: projEnd } },
       select: { amount: true, type: true, dueDate: true, recurringTaskId: true, isInstallment: true, paymentMethod: true },
@@ -1078,6 +1085,8 @@ export async function getFinanceOverview(yearArg?: number, monthArg?: number) {
       active: r.active,
       type: (r.type as TxType) ?? "EXPENSE",
       paymentMethod: r.paymentMethod,
+      creditCardId: r.creditCardId,
+      creditCardName: r.creditCard?.name ?? null,
       moduleId: r.moduleId,
       module: r.module ? { id: r.module.id, title: r.module.title, color: r.module.color } : null,
       dueDate: new Date(Date.UTC(year, month, Math.min(r.dueDay || 10, lastDay), 12)),
@@ -1483,6 +1492,7 @@ export async function launchRecurringForMonth(yearArg: number, monthArg: number,
     where: {
       amount: { not: null },
       kind: "FINANCE",
+      creditCardId: null, // as do cartão entram sozinhas no dia da cobrança
       ...(onlyIds && onlyIds.length ? { id: { in: onlyIds } } : { active: true }),
     },
     include: { module: true },
@@ -1671,6 +1681,7 @@ export async function deleteCreditCard(id: string) {
  */
 export async function getCreditCardsOverview() {
   await requireAuth();
+  await spawnDueCardCharges();
   const cards = await prisma.creditCard.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] });
   if (cards.length === 0) return [];
   const today = todayMidday();
