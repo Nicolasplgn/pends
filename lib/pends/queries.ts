@@ -4,7 +4,7 @@
 
 import { prisma } from "../prisma";
 import {
-  createCardCore, createTransactionCore, getTodayOverviewCore, monthRange, round2, todayMidday,
+  cardLimitWhere, createCardCore, createTransactionCore, getTodayOverviewCore, monthRange, round2, todayMidday,
   toggleCardCompletionCore, updateCardDetailsCore, type PayMethod, type TxType,
 } from "./core";
 
@@ -175,7 +175,7 @@ export async function listCreditCards() {
   const cards = await prisma.creditCard.findMany({ where: { active: true }, orderBy: { name: "asc" } });
   const open = await prisma.transaction.groupBy({
     by: ["creditCardId"],
-    where: { creditCardId: { in: cards.map((c) => c.id) }, paid: false },
+    where: { creditCardId: { in: cards.map((c) => c.id) }, ...cardLimitWhere(todayMidday()) },
     _sum: { amount: true },
   });
   return cards.map((c) => {

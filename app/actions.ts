@@ -9,7 +9,7 @@ import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey } from "../lib
 import {
   CURRENT_USER, parseLocalDateToMidday, round2, safeYearMonth, monthRange, todayMidday,
   stripInstallmentSuffix, txInclude, spawnDueRoutines, placeOnInvoice, cardFor,
-  completeLinkedCard, payLinkedTransactions,
+  completeLinkedCard, payLinkedTransactions, cardLimitWhere,
   getModulesCore, createCardCore, toggleCardCompletionCore, updateCardDetailsCore, createTransactionCore, getTodayOverviewCore,
   type TxType, type PayMethod, type TxScope, type TransactionInput,
 } from "../lib/pends/core";
@@ -1688,7 +1688,7 @@ export async function getCreditCardsOverview() {
     }),
     prisma.transaction.groupBy({
       by: ["creditCardId", "type"],
-      where: { creditCardId: { in: cards.map((c) => c.id) }, paid: false },
+      where: { creditCardId: { in: cards.map((c) => c.id) }, ...cardLimitWhere(today) },
       _sum: { amount: true },
     }),
   ]);

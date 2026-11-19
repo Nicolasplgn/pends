@@ -464,3 +464,14 @@ export async function getTodayOverviewCore() {
     },
   };
 }
+
+/**
+ * O que ocupa o limite do cartão: tudo em aberto, menos cobranças de contas fixas
+ * (assinaturas) que ainda não caíram — essas só entram no limite no dia da cobrança.
+ */
+export function cardLimitWhere(today: Date) {
+  return {
+    paid: false,
+    OR: [{ recurringTaskId: null }, { purchaseDate: null }, { purchaseDate: { lte: today } }],
+  };
+}
