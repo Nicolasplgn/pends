@@ -155,12 +155,48 @@ export async function listModules() {
   }));
 }
 
+/** Cartão pelo nome (ou parte dele). Sem nome, só escolhe sozinho se houver um cartão ativo. */
+async function pickCreditCard(name?: string) {
+  const cards = await prisma.creditCard.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } });
+  if (cards.length === 0) throw new Error("Nenhum cartão cadastrado no Pends. Cadastre em Finanças > Cartões.");
+  const names = cards.map((c) => c.name).join(", ");
+  if (!name?.trim()) {
+    if (cards.length === 1) return cards[0];
+    throw new Error(`Informe o cartão (campo cartao). Cartões: ${names}.`);
+  }
+  const q = name.trim().toLowerCase();
+  const found = cards.filter((c) => c.name.toLowerCase() === q);
+  const partial = found.length ? found : cards.filter((c) => c.name.toLowerCase().includes(q));
+  if (partial.length === 1) return partial[0];
+  throw new Error(`Cartão "${name.trim().slice(0, 40)}" não encontrado. Cartões: ${names}.`);
+}
+
+export async function listCreditCards() {
+  const cards = await prisma.creditCard.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+  const open = await prisma.transaction.groupBy({
+    by: ["creditCardId"],
+    where: { creditCardId: { in: cards.map((c) => c.id) }, paid: false },
+    _sum: { amount: true },
+  });
+  return cards.map((c) => {
+    const usado = round2(open.find((o) => o.creditCardId === c.id)?._sum.amount ?? 0);
+    return {
+      nome: c.name,
+      fechaDia: c.closingDay,
+      venceDia: c.dueDay,
+      limite: c.limit,
+      usado,
+      disponivel: c.limit != null ? round2(c.limit - usado) : null,
+    };
+  });
+}
+
 export async function createTransactionFromTool(i: {
   valor: number; tipo: "entrada" | "saida"; categoria: string; data: string; descricao: string;
-  forma: "pix" | "boleto" | "debito" | "cartao"; ja_pago?: boolean;
+  forma: "pix" | "boleto" | "debito" | "cartao"; ja_pago?: boolean; cartao?: string;
 }) {
   const method: PayMethod = { pix: "PIX", boleto: "BOLETO", debito: "DEBIT", cartao: "CREDIT_CARD" }[i.forma] as PayMethod;
-  const card = method === "CREDIT_CARD" ? await prisma.creditCard.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } }) : null;
+  const card = method === "CREDIT_CARD" ? await pickCreditCard(i.cartao) : null;
   // Mesma regra da tela: data de hoje/passada = pago; futura = a pagar; cartão = a pagar até pagar a fatura
   const today = new Date().toISOString().slice(0, 10);
   const paid = i.ja_pago ?? (method === "CREDIT_CARD" ? false : i.data <= today);

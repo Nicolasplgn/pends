@@ -4,8 +4,8 @@ import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
 import { corsHeaders, verifyAccessToken } from "@/lib/oauth";
 import {
-  completeCard, createCardFromTool, createTransactionFromTool, daySummary, financeSummary, listCards, listModules,
-  updateCardFromTool,
+  completeCard, createCardFromTool, createTransactionFromTool, daySummary, financeSummary, listCards, listCreditCards,
+  listModules, updateCardFromTool,
 } from "@/lib/pends/queries";
 
 export const dynamic = "force-dynamic";
@@ -145,7 +145,7 @@ const handler = createMcpHandler(
       {
         title: "Registrar lançamento financeiro",
         description:
-          "Registra uma entrada ou saída no financeiro do Pends. Data de hoje ou passada entra como paga/recebida; data futura entra a pagar/receber. No cartão, entra a pagar na fatura do cartão.",
+          "Registra uma entrada ou saída no financeiro do Pends. Data de hoje ou passada entra como paga/recebida; data futura entra a pagar/receber. No cartão, entra a pagar na fatura do cartão escolhido em `cartao`.",
         inputSchema: z.object({
           valor: z.number().positive().max(10_000_000).describe("valor em reais, ex.: 59.9"),
           tipo: z.enum(["entrada", "saida"]),
@@ -154,11 +154,29 @@ const handler = createMcpHandler(
           descricao: z.string().trim().min(1).max(200),
           forma: z.enum(["pix", "boleto", "debito", "cartao"]).default("pix"),
           ja_pago: z.boolean().optional().describe("força pago/recebido (true) ou em aberto (false)"),
+          cartao: z.string().trim().max(40).optional().describe("nome do cartão quando forma = cartao (veja listar_cartoes); obrigatório se houver mais de um"),
         }),
       },
       async (a) => {
         try {
           return ok(await createTransactionFromTool(a));
+        } catch (e) {
+          return fail(e);
+        }
+      }
+    );
+
+    server.registerTool(
+      "listar_cartoes",
+      {
+        title: "Listar cartões de crédito",
+        description: "Lista os cartões de crédito com dia de fechamento, vencimento, limite, valor em aberto e limite disponível.",
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok(await listCreditCards());
         } catch (e) {
           return fail(e);
         }
