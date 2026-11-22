@@ -57,9 +57,17 @@ function cardView(c: {
     com: c.assignee ?? "comigo",
     concluida: c.completed,
     checklist: list.length ? `${list.filter((i) => i.done).length}/${list.length}` : null,
-    ...(withDescription && c.description ? { descricao: c.description.slice(0, 500) } : {}),
+    ...(withDescription && c.description
+      ? c.description.length > DESC_MAX
+        ? { descricao: c.description.slice(0, DESC_MAX), descricaoCortada: true }
+        : { descricao: c.description }
+      : {}),
   };
 }
+
+/** Até onde a descrição volta inteira para o Claude (o resto avisa com descricaoCortada). */
+const DESC_MAX = 6000;
+const CURRENT_USER = "Claude";
 
 const cardSelect = {
   id: true, title: true, priority: true, dueDate: true, completed: true, assignee: true, checklist: true, description: true,
@@ -111,22 +119,59 @@ export async function createCardFromTool(i: {
 }
 
 export async function updateCardFromTool(ref: string, i: {
-  titulo?: string; descricao?: string; modulo?: string; prioridade?: string; prazo?: string | null;
+  titulo?: string; descricao?: string; nota?: string; modulo?: string; prioridade?: string; prazo?: string | null;
 }) {
   const id = await resolveCardRef(ref);
   const cur = await prisma.card.findUnique({ where: { id } });
   if (!cur) throw new Error("Pendência não encontrada.");
+  if (i.descricao !== undefined && i.nota) throw new Error("Use descricao (substitui o texto) ou nota (acrescenta no fim), não os dois.");
   const moduleId = i.modulo !== undefined ? await moduleIdByName(i.modulo) : cur.moduleId;
+  // nota: acrescenta uma linha no fim sem reescrever (evita perder texto que o Claude não viu)
+  const base = cur.description ?? "";
+  const description = i.nota?.trim()
+    ? [base.replace(/\s+$/, ""), i.nota.trim()].filter(Boolean).join("\n")
+    : i.descricao ?? base;
   await updateCardDetailsCore(
     id,
     i.titulo ?? cur.title,
-    i.descricao ?? cur.description ?? "",
+    description,
     i.prioridade ?? cur.priority,
     i.prazo === null ? "" : i.prazo ?? iso(cur.dueDate) ?? "",
     moduleId ?? ""
   );
+  if (i.nota?.trim() || i.descricao !== undefined) {
+    await prisma.history.create({
+      data: { cardId: id, action: "Edição", details: i.nota?.trim() ? "Nota adicionada pelo Claude" : "Descrição alterada pelo Claude", user: CURRENT_USER },
+    });
+  }
   const card = await prisma.card.findUnique({ where: { id }, select: cardSelect });
-  return card ? cardView(card, true) : null;
+  return card ? { ...cardView(card, true), descricaoTamanho: card.description?.length ?? 0 } : null;
+}
+
+/** Ficha completa: descrição inteira, checklist, dependência e histórico recente. */
+export async function cardDetail(ref: string) {
+  const id = await resolveCardRef(ref);
+  const c = await prisma.card.findUnique({
+    where: { id },
+    select: {
+      ...cardSelect,
+      createdAt: true,
+      completedAt: true,
+      blockedBy: { select: { id: true, title: true } },
+      history: { orderBy: { timestamp: "desc" }, take: 8, select: { action: true, details: true, timestamp: true } },
+    },
+  });
+  if (!c) throw new Error("Pendência não encontrada.");
+  const items = ((c.checklist as { text: string; done: boolean }[] | null) ?? []).map((x) => ({ item: x.text, feito: x.done }));
+  return {
+    ...cardView(c, true),
+    descricaoTamanho: c.description?.length ?? 0,
+    itensChecklist: items,
+    esperandoPor: c.blockedBy ? { id: shortRef(c.blockedBy.id), titulo: c.blockedBy.title } : null,
+    criadaEm: iso(c.createdAt),
+    concluidaEm: iso(c.completedAt),
+    historico: c.history.map((h) => ({ quando: h.timestamp.toISOString().slice(0, 16).replace("T", " "), acao: h.action, detalhe: h.details })),
+  };
 }
 
 /** Conclui (idempotente): só alterna se ainda estiver aberta. */
