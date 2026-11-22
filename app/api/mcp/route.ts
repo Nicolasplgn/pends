@@ -4,7 +4,7 @@ import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
 import { corsHeaders, verifyAccessToken } from "@/lib/oauth";
 import {
-  completeCard, createCardFromTool, createTransactionFromTool, daySummary, financeSummary, listCards, listCreditCards,
+  cardDetail, completeCard, createCardFromTool, createTransactionFromTool, daySummary, financeSummary, listCards, listCreditCards,
   listModules, updateCardFromTool,
 } from "@/lib/pends/queries";
 
@@ -67,7 +67,7 @@ const handler = createMcpHandler(
         description: "Cria uma pendência na etapa \"A fazer\" do quadro.",
         inputSchema: z.object({
           titulo: z.string().trim().min(1).max(200),
-          descricao: z.string().trim().max(2000).optional(),
+          descricao: z.string().trim().max(8000).optional(),
           modulo: z.string().trim().max(60).optional().describe("nome exato do módulo (veja listar_modulos)"),
           prioridade: priority.default("Normal"),
           prazo: date.optional().describe("AAAA-MM-DD"),
@@ -87,11 +87,13 @@ const handler = createMcpHandler(
       "atualizar_pendencia",
       {
         title: "Atualizar pendência",
-        description: "Altera título, descrição, módulo, prioridade ou prazo de uma pendência. Só os campos enviados mudam.",
+        description:
+          "Altera uma pendência; só os campos enviados mudam. Para registrar um andamento/anotação use `nota`: ela é acrescentada no fim da descrição sem apagar nada. `descricao` SUBSTITUI o texto inteiro: só use se o usuário pedir para reescrever, e antes leia a descrição completa com ver_pendencia.",
         inputSchema: z.object({
           id: ref,
           titulo: z.string().trim().min(1).max(200).optional(),
-          descricao: z.string().trim().max(2000).optional(),
+          nota: z.string().trim().min(1).max(2000).optional().describe("linha a acrescentar no fim da descrição, ex.: \"22/11: aguardando a ESWEB subir o site\""),
+          descricao: z.string().trim().max(8000).optional().describe("texto novo e completo da descrição (substitui o atual)"),
           modulo: z.string().trim().max(60).optional(),
           prioridade: priority.optional(),
           prazo: date.nullable().optional().describe("AAAA-MM-DD, ou null para tirar o prazo"),
@@ -100,6 +102,24 @@ const handler = createMcpHandler(
       async ({ id, ...rest }) => {
         try {
           return ok({ atualizada: await updateCardFromTool(id, rest) });
+        } catch (e) {
+          return fail(e);
+        }
+      }
+    );
+
+    server.registerTool(
+      "ver_pendencia",
+      {
+        title: "Ver pendência",
+        description:
+          "Ficha completa de uma pendência: descrição inteira, checklist, de quem ela depende e o histórico recente. Use antes de editar a descrição.",
+        inputSchema: z.object({ id: ref }),
+        annotations: { readOnlyHint: true },
+      },
+      async ({ id }) => {
+        try {
+          return ok(await cardDetail(id));
         } catch (e) {
           return fail(e);
         }
