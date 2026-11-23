@@ -356,10 +356,6 @@ export default function PendsApp() {
             columns={columns}
             setColumns={setColumns}
             modules={modules}
-            selectedMonth={selectedMonth}
-            selectedYear={selectedYear}
-            onPrevMonth={handlePrevMonth}
-            onNextMonth={handleNextMonth}
             activeModuleFilter={activeModuleFilter}
             setActiveModuleFilter={setActiveModuleFilter}
             onCardClick={(cardId) => setSelectedCardId(cardId)}
