@@ -4,7 +4,7 @@
 
 import { prisma } from "../prisma";
 import {
-  cardLimitWhere, spawnDueCardCharges, createCardCore, createTransactionCore, getTodayOverviewCore, monthRange, round2, todayMidday,
+  cardLimitWhere, spawnDueCardCharges, moveCardCore, createCardCore, createTransactionCore, getTodayOverviewCore, monthRange, round2, todayMidday,
   toggleCardCompletionCore, updateCardDetailsCore, type PayMethod, type TxType,
 } from "./core";
 
@@ -15,7 +15,7 @@ const iso = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : 
 
 /** Resolve a referência curta para o id real; erro se não achar ou se for ambígua. */
 export async function resolveCardRef(ref: string) {
-  const clean = ref.trim().toLowerCase();
+  const clean = ref.trim().replace(/^#/, "").toLowerCase();
   if (!/^[0-9a-f-]{6,36}$/.test(clean)) throw new Error("Referência de pendência inválida.");
   const found = await prisma.card.findMany({ where: { id: { startsWith: clean } }, select: { id: true }, take: 2 });
   if (found.length === 0) throw new Error("Pendência não encontrada.");
@@ -96,7 +96,10 @@ export async function listCards(f: {
   }
   if (f.texto) {
     const t = { contains: f.texto, mode: "insensitive" };
-    where.AND = [{ OR: [{ title: t }, { description: t }] }];
+    // "#707B0B" ou "707b0b": também procura pelo número da ficha
+    const ficha = f.texto.trim().replace(/^#/, "").toLowerCase();
+    const byRef = /^[0-9a-f]{4,36}$/.test(ficha) ? [{ id: { startsWith: ficha } }] : [];
+    where.AND = [{ OR: [{ title: t }, { description: t }, ...byRef] }];
   }
   const [rows, total] = await Promise.all([
     prisma.card.findMany({ where, select: cardSelect, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { order: "asc" }], take: f.limite }),
@@ -171,6 +174,36 @@ export async function cardDetail(ref: string) {
     criadaEm: iso(c.createdAt),
     concluidaEm: iso(c.completedAt),
     historico: c.history.map((h) => ({ quando: h.timestamp.toISOString().slice(0, 16).replace("T", " "), acao: h.action, detalhe: h.details })),
+  };
+}
+
+/** "📥 Solicitação" → "solicitacao" (sem emoji, acento e caixa) para achar a etapa pelo nome. */
+const normStage = (t: string) =>
+  t.normalize("NFD").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim().toLowerCase();
+
+export async function listStages() {
+  const cols = await prisma.column.findMany({ orderBy: { order: "asc" }, include: { _count: { select: { cards: true } } } });
+  return cols.map((c, i) => ({ posicao: i + 1, etapa: c.title, pendencias: c._count.cards, final: c.isDone }));
+}
+
+/** Move a pendência para a etapa pelo nome (ou parte dele, sem emoji/acento). */
+export async function moveCardFromTool(ref: string, etapa: string) {
+  const id = await resolveCardRef(ref);
+  const cols = await prisma.column.findMany({ orderBy: { order: "asc" } });
+  const q = normStage(etapa);
+  if (!q) throw new Error("Informe o nome da etapa.");
+  const exact = cols.filter((c) => normStage(c.title) === q);
+  const found = exact.length ? exact : cols.filter((c) => normStage(c.title).includes(q));
+  const names = cols.map((c) => c.title).join(", ");
+  if (found.length === 0) throw new Error(`Etapa "${etapa.slice(0, 40)}" não existe. Etapas: ${names}.`);
+  if (found.length > 1) throw new Error(`Mais de uma etapa combina com "${etapa.slice(0, 40)}": ${found.map((c) => c.title).join(", ")}.`);
+  const before = await prisma.card.findUnique({ where: { id }, select: { column: { select: { title: true } } } });
+  const moved = await moveCardCore(id, found[0].id, CURRENT_USER);
+  const card = await prisma.card.findUnique({ where: { id }, select: cardSelect });
+  return {
+    movida: moved,
+    ...(moved ? { de: before?.column.title ?? null } : { aviso: "A pendência já estava nessa etapa." }),
+    pendencia: card ? cardView(card) : null,
   };
 }
 

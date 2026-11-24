@@ -155,8 +155,11 @@ export function KanbanBoard({
     if (assigneeFilter === "__me" && card.assignee) return false;
     if (assigneeFilter !== "all" && assigneeFilter !== "__me" && card.assignee !== assigneeFilter) return false;
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      if (!card.title.toLowerCase().includes(q) && !(card.description || "").toLowerCase().includes(q)) return false;
+      const q = searchQuery.trim().toLowerCase();
+      // "#707B0B" ou "707b0b": número da ficha (começo do id)
+      const ficha = q.replace(/^#/, "");
+      const byRef = /^[0-9a-f]{4,36}$/.test(ficha) && card.id.toLowerCase().startsWith(ficha);
+      if (!byRef && !card.title.toLowerCase().includes(q) && !(card.description || "").toLowerCase().includes(q)) return false;
     }
     if (focusFilter === "urgent" && card.priority !== "Urgente" && card.priority !== "Alta") return false;
     if (focusFilter === "overdue" && !isCardOverdue(card.dueDate, card.completed)) return false;
@@ -530,7 +533,7 @@ export function KanbanBoard({
           <input
             ref={searchRef}
             type="text"
-            placeholder="Buscar  ( / )"
+            placeholder="Buscar ou #ficha  ( / )"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") { setSearchQuery(""); (e.target as HTMLInputElement).blur(); } }}

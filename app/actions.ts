@@ -9,7 +9,7 @@ import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey } from "../lib
 import {
   CURRENT_USER, parseLocalDateToMidday, round2, safeYearMonth, monthRange, todayMidday,
   stripInstallmentSuffix, txInclude, spawnDueRoutines, placeOnInvoice, cardFor,
-  completeLinkedCard, payLinkedTransactions, cardLimitWhere, spawnDueCardCharges,
+  completeLinkedCard, payLinkedTransactions, cardLimitWhere, spawnDueCardCharges, moveCardCore,
   getModulesCore, createCardCore, toggleCardCompletionCore, updateCardDetailsCore, createTransactionCore, getTodayOverviewCore,
   type TxType, type PayMethod, type TxScope, type TransactionInput,
 } from "../lib/pends/core";
@@ -243,29 +243,7 @@ export async function createCard(
 
 export async function moveCard(cardId: string, newColumnId: string) {
   await requireAuth();
-  const card = await prisma.card.findUnique({ where: { id: cardId }, include: { column: true } });
-  const newCol = await prisma.column.findUnique({ where: { id: newColumnId } });
-
-  if (card && newCol && card.columnId !== newColumnId) {
-    const isNowCompleted = newCol.isDone;
-
-    await prisma.card.update({
-      where: { id: cardId },
-      data: {
-        columnId: newColumnId,
-        completed: isNowCompleted,
-        completedAt: isNowCompleted ? (card.completedAt ?? new Date()) : null,
-        history: {
-          create: {
-            action: isNowCompleted ? "Conclusão" : "Movimento",
-            details: `Moveu para "${newCol.title}" ${isNowCompleted ? "(Finalizado)" : ""}`,
-            user: CURRENT_USER
-          }
-        }
-      }
-    });
-    if (isNowCompleted && !card.completed) await payLinkedTransactions(cardId);
-  }
+  await moveCardCore(cardId, newColumnId);
   revalidatePath("/");
 }
 

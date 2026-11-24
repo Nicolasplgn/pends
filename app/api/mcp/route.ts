@@ -4,7 +4,7 @@ import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
 import { corsHeaders, verifyAccessToken } from "@/lib/oauth";
 import {
-  cardDetail, completeCard, createCardFromTool, createTransactionFromTool, daySummary, financeSummary, listCards, listCreditCards,
+  cardDetail, completeCard, createCardFromTool, listStages, moveCardFromTool, createTransactionFromTool, daySummary, financeSummary, listCards, listCreditCards,
   listModules, updateCardFromTool,
 } from "@/lib/pends/queries";
 
@@ -31,7 +31,7 @@ function fail(e: unknown) {
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use o formato AAAA-MM-DD");
 const priority = z.enum(["Baixa", "Normal", "Alta", "Urgente"]);
-const ref = z.string().trim().min(6).max(36).describe("id da pendência (os 8 caracteres que aparecem em listar_pendencias)");
+const ref = z.string().trim().min(6).max(37).describe("número da ficha (os 8 caracteres de listar_pendencias, ex.: 707B0B ou #707B0B)");
 
 const handler = createMcpHandler(
   (server) => {
@@ -46,7 +46,7 @@ const handler = createMcpHandler(
           modulo: z.string().trim().max(60).optional().describe("nome (ou parte) do módulo de vida, ex.: Trabalho"),
           prazo_de: date.optional().describe("prazo a partir de (AAAA-MM-DD)"),
           prazo_ate: date.optional().describe("prazo até (AAAA-MM-DD)"),
-          texto: z.string().trim().max(100).optional().describe("busca no título e na descrição"),
+          texto: z.string().trim().max(100).optional().describe("busca no título, na descrição ou pelo número da ficha (ex.: #707B0B)"),
           limite: z.number().int().min(1).max(50).default(20).describe("máximo de itens (1 a 50)"),
         }),
         annotations: { readOnlyHint: true },
@@ -120,6 +120,44 @@ const handler = createMcpHandler(
       async ({ id }) => {
         try {
           return ok(await cardDetail(id));
+        } catch (e) {
+          return fail(e);
+        }
+      }
+    );
+
+    server.registerTool(
+      "mover_pendencia",
+      {
+        title: "Mover pendência de etapa",
+        description:
+          "Move a pendência para outra etapa do quadro (ex.: \"Em teste\", \"Aguardando confirmação\"). Aceita o nome ou parte dele, sem emoji nem acento; veja as etapas com listar_etapas. Mover para a etapa final conclui a pendência.",
+        inputSchema: z.object({
+          id: ref,
+          etapa: z.string().trim().min(2).max(60).describe("nome da etapa de destino, ex.: Em teste"),
+        }),
+        annotations: { idempotentHint: true },
+      },
+      async ({ id, etapa }) => {
+        try {
+          return ok(await moveCardFromTool(id, etapa));
+        } catch (e) {
+          return fail(e);
+        }
+      }
+    );
+
+    server.registerTool(
+      "listar_etapas",
+      {
+        title: "Listar etapas do quadro",
+        description: "Etapas do quadro (colunas do Pipeline) na ordem, com quantas pendências cada uma tem e qual é a final.",
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok(await listStages());
         } catch (e) {
           return fail(e);
         }
