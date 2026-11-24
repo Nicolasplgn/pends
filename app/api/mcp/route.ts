@@ -278,7 +278,19 @@ const handler = createMcpHandler(
       }
     );
   },
-  { serverInfo: { name: "pends", version: "1.0.0" } }
+  {
+    serverInfo: { name: "pends", version: "1.1.0" },
+    // Regras de uso que vão junto com o conector (valem mesmo sem plugin instalado)
+    instructions: [
+      "Pends é a lista oficial de pendências e o controle financeiro do usuário. Responda em português do Brasil.",
+      "Pendências: o número da ficha que aparece no app (ex.: FICHA #707B0B) é o id; use direto (707B0B ou #707B0B) ou busque em listar_pendencias com texto.",
+      "Andamento/anotação: atualizar_pendencia com `nota` (uma linha começando pela data, ex.: \"24/11: em teste\"). A nota é acrescentada no fim e não apaga nada. Nunca reescreva `descricao` só para acrescentar algo; para conferir, use ver_pendencia.",
+      "Mudar de etapa: mover_pendencia com o nome da etapa (ex.: \"em teste\", \"aguardando\"); veja as etapas com listar_etapas. Não peça para o usuário arrastar no quadro. Andamento + troca de etapa: grave a nota e depois mova.",
+      "Concluir: concluir_pendencia (ou mover para a etapa final). Não existe exclusão pelo conector.",
+      "Gastos no cartão: registrar_transacao com forma \"cartao\" e `cartao` = nome do cartão; se houver mais de um e ele não disser, pergunte. listar_cartoes mostra limite e disponível. Assinaturas/contas fixas no cartão entram sozinhas no dia: não registre de novo.",
+      "Antes de registrar gasto ou concluir pendência que o usuário não pediu de forma clara, confirme.",
+    ].join("\n"),
+  }
 );
 
 const authed = withMcpAuth(
