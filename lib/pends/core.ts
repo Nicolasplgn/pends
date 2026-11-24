@@ -523,3 +523,35 @@ export async function spawnDueCardCharges(today: Date = todayMidday()) {
   }
   return created;
 }
+
+/**
+ * Move a pendência para outra etapa (mesma regra do quadro): vai para o fim da etapa,
+ * conclui ao entrar na etapa final (e quita lançamentos ligados), reabre ao sair dela.
+ * Retorna false se já estava nessa etapa.
+ */
+export async function moveCardCore(cardId: string, newColumnId: string, user: string = CURRENT_USER) {
+  const card = await prisma.card.findUnique({ where: { id: cardId } });
+  const newCol = await prisma.column.findUnique({ where: { id: newColumnId } });
+  if (!card || !newCol) throw new Error("Pendência ou etapa não encontrada.");
+  if (card.columnId === newColumnId) return false;
+  const isNowCompleted = newCol.isDone;
+  const order = await prisma.card.count({ where: { columnId: newColumnId } });
+  await prisma.card.update({
+    where: { id: cardId },
+    data: {
+      columnId: newColumnId,
+      order,
+      completed: isNowCompleted,
+      completedAt: isNowCompleted ? (card.completedAt ?? new Date()) : null,
+      history: {
+        create: {
+          action: isNowCompleted ? "Conclusão" : "Movimento",
+          details: `Moveu para "${newCol.title}" ${isNowCompleted ? "(Finalizado)" : ""}`.trim(),
+          user,
+        },
+      },
+    },
+  });
+  if (isNowCompleted && !card.completed) await payLinkedTransactions(cardId);
+  return true;
+}
