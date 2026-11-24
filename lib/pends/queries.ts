@@ -18,7 +18,17 @@ export async function resolveCardRef(ref: string) {
   const clean = ref.trim().replace(/^#/, "").toLowerCase();
   if (!/^[0-9a-f-]{6,36}$/.test(clean)) throw new Error("Referência de pendência inválida.");
   const found = await prisma.card.findMany({ where: { id: { startsWith: clean } }, select: { id: true }, take: 2 });
-  if (found.length === 0) throw new Error("Pendência não encontrada.");
+  if (found.length === 0) {
+    // Pode ter sido concluída e arquivada: avisa em vez de dizer que não existe
+    const arch = await prisma.cardArchive.findFirst({ where: { id: { startsWith: clean } }, select: { title: true, archivedAt: true } });
+    if (arch) {
+      throw new Error(
+        `A ficha #${clean.slice(0, 6).toUpperCase()} ("${arch.title.slice(0, 80)}") foi concluída e arquivada em ${arch.archivedAt.toLocaleDateString("pt-BR")}. ` +
+          "Para mexer nela, restaure no app: Pipeline > ⋯ > Arquivo de concluídos."
+      );
+    }
+    throw new Error("Pendência não encontrada.");
+  }
   if (found.length > 1) throw new Error("Referência ambígua: use mais caracteres do id.");
   return found[0].id;
 }
