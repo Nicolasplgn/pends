@@ -39,6 +39,8 @@ interface KanbanBoardProps {
   onQuickChangeModule: (cardId: string, modId: string) => Promise<void>;
   onToggleComplete: (cardId: string) => Promise<void>;
   onReload: () => Promise<void>;
+  /** Pedido externo para filtrar por projeto (ex.: clique no Analytics) */
+  projectFilterRequest?: { id: string; n: number };
 }
 
 const ICEBOX = /gelo|icebox|radar|espera|sem pressa/i;
@@ -66,6 +68,7 @@ export function KanbanBoard({
   onQuickChangeModule,
   onToggleComplete,
   onReload,
+  projectFilterRequest,
 }: KanbanBoardProps) {
   const [activeDraggingCard, setActiveDraggingCard] = useState<KanbanCardData | null>(null);
   const isDesktop = useIsDesktop();
@@ -99,7 +102,13 @@ export function KanbanBoard({
   // "all" = todos · "__me" = comigo · nome = com essa pessoa
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   // "all" = todos · "__none" = sem projeto · id = projeto
-  const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [projectFilter, setProjectFilter] = useState<string>(() => (projectFilterRequest?.n ? projectFilterRequest.id : "all"));
+  // Novo pedido de filtro vindo de fora (o quadro pode já estar montado)
+  const [seenProjectReq, setSeenProjectReq] = useState(projectFilterRequest?.n ?? 0);
+  if (projectFilterRequest && projectFilterRequest.n !== seenProjectReq) {
+    setSeenProjectReq(projectFilterRequest.n);
+    setProjectFilter(projectFilterRequest.id);
+  }
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportAssignee, setReportAssignee] = useState<string | null>(null);

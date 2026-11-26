@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Module } from "@prisma/client";
+import type { Module, Project } from "@prisma/client";
 import {
   FileText, Layers, TrendingUp, Clock, AlertTriangle, Calendar, Circle, ShieldCheck, Zap, Activity, ArrowUpRight, Flame, CheckCircle2, Hourglass, Target, Network, AlertCircle
 } from "lucide-react";
@@ -16,6 +16,7 @@ import { ExecutiveReportModal } from "./ExecutiveReportModal";
 import { DateNavigator } from "../shared/DateNavigator";
 import { PulseChart } from "./PulseChart";
 import { ModulesPanel } from "./ModulesPanel";
+import { EuPanel } from "./EuPanel";
 
 interface AnalyticsDashProps {
   stats: DashboardStats | null;
@@ -31,6 +32,9 @@ interface AnalyticsDashProps {
   onOpenFinances: () => void;
   onCardClick?: (cardId: string) => void;
   onGoToPipeline: (modId: string) => void;
+  projects?: Project[];
+  /** Abre o Pipeline filtrado por um projeto (usado pela seção do conector Eu) */
+  onFilterProject?: (projectId: string) => void;
 }
 
 // Helper: Calcula a diferença exata em dias
@@ -58,6 +62,8 @@ export function AnalyticsDash({
   onOpenFinances,
   onCardClick,
   onGoToPipeline,
+  projects = [],
+  onFilterProject,
 }: AnalyticsDashProps) {
   const [showReportModal, setShowReportModal] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState<"urgent" | "overdue" | "all">("urgent");
@@ -353,6 +359,9 @@ export function AnalyticsDash({
         onCardClick={onCardClick}
         onGoToPipeline={onGoToPipeline}
       />
+
+      {/* CONECTOR PESSOAL "EU": PC, projetos e avisos */}
+      <EuPanel columns={columns} projects={projects} onFilterProject={(id) => onFilterProject?.(id)} />
 
       {/* BLOCO 2: TOPOGRAFIA DO PIPELINE E MATRIZ DE PRIORIDADE */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
