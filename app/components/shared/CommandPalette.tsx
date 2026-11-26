@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Module } from "@prisma/client";
 import {
-  Search, Globe, Activity, Layout, Wallet, Sun, Plus, Receipt, Mail, Download, FileText, Layers, CornerDownLeft,
-} from "lucide-react";
+  Search, Globe, Activity, Layout, Wallet, Sun, Plus, Receipt, Mail, Download, FileText, Layers, CornerDownLeft, KeyRound } from "lucide-react";
 import type { KanbanColumn } from "../../types";
 
-export type PaletteTab = "today" | "neural" | "dashboard" | "kanban" | "finances";
+export type PaletteTab = "today" | "neural" | "dashboard" | "kanban" | "finances" | "cofre";
 
 interface Command {
   id: string;
@@ -49,6 +48,7 @@ export function CommandPalette({
       { id: "new-tx", label: "Novo lançamento", hint: "Finanças", icon: <Receipt size={15} />, keywords: "gasto despesa receita conta pagar", run: onNewTransaction },
       { id: "go-today", label: "Ir para Hoje", icon: <Sun size={15} />, keywords: "inicio dia pagar receber fazer", run: () => onNavigate("today") },
       { id: "go-neural", label: "Ir para Visão Neural", icon: <Globe size={15} />, run: () => onNavigate("neural") },
+      { id: "go-cofre", label: "Ir para o Cofre", icon: <KeyRound size={15} />, keywords: "senhas acessos login cofre", run: () => onNavigate("cofre") },
       { id: "go-dash", label: "Ir para o Painel", icon: <Activity size={15} />, keywords: "dashboard relatorio analytics modulos grafico", run: () => onNavigate("dashboard") },
       { id: "go-kanban", label: "Ir para Pipeline", icon: <Layout size={15} />, keywords: "kanban quadro", run: () => onNavigate("kanban") },
       { id: "go-fin", label: "Ir para Finanças", icon: <Wallet size={15} />, keywords: "dinheiro gastos", run: () => onNavigate("finances") },

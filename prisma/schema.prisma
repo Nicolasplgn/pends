@@ -237,3 +237,35 @@ model CreditCard {
   transactions Transaction[]
   recurring    RecurringTask[]
 }
+
+// COFRE DE SENHAS: senha e notas sempre cifradas (AES-256-GCM, chave derivada do AUTH_SECRET)
+model Credencial {
+  id               String          @id @default(uuid())
+  titulo           String
+  url              String?
+  usuario          String?
+  senhaCifrada     String
+  notasCifradas    String?
+  projeto          String?         // mesmo nome usado nos projetos das pendências (ex.: "Wave")
+  modulo           String?
+  tags             String[]        @default([])
+  criadoEm         DateTime        @default(now())
+  atualizadoEm     DateTime        @updatedAt
+  ultimaRevelacao  DateTime?
+  logs             CredencialLog[]
+
+  @@index([projeto])
+}
+
+model CredencialLog {
+  id            String     @id @default(uuid())
+  credencialId  String?    // fica vazio depois que a credencial é apagada (o log continua)
+  credencial    Credencial? @relation(fields: [credencialId], references: [id], onDelete: SetNull)
+  titulo        String     // título na hora do acesso (nunca a senha)
+  acao          String     // criou | revelou | copiou | editou | apagou | importou
+  origem        String     // app | mcp
+  quando        DateTime   @default(now())
+
+  @@index([credencialId, quando])
+  @@index([origem, acao, quando])
+}

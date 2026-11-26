@@ -3,12 +3,11 @@
 import type { Module } from "@prisma/client";
 import { 
   Globe, Activity, Layout, Wallet, Sun, 
-  Plus, Pencil, Trash2, LogOut, X, Search
-} from "lucide-react";
+  Plus, Pencil, Trash2, LogOut, X, Search, KeyRound } from "lucide-react";
 
 interface SidebarProps {
-  activeTab: "today" | "neural" | "dashboard" | "kanban" | "finances";
-  setActiveTab: (tab: "today" | "neural" | "dashboard" | "kanban" | "finances") => void;
+  activeTab: "today" | "neural" | "dashboard" | "kanban" | "finances" | "cofre";
+  setActiveTab: (tab: "today" | "neural" | "dashboard" | "kanban" | "finances" | "cofre") => void;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
   modules: Module[];
@@ -111,6 +110,15 @@ export function Sidebar({
             }`}
           >
             <Wallet size={16} className="text-emerald-400"/> Finanças & Gastos
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab("cofre"); setMobileMenuOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === "cofre" ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+            }`}
+          >
+            <KeyRound size={16}/> Cofre
           </button>
         </div>
 
