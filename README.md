@@ -34,3 +34,17 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Cofre de senhas
+
+As senhas e notas do cofre ficam cifradas no banco (AES-256-GCM, IV aleatório por registro). A chave é derivada do `AUTH_SECRET` (HKDF, `pends-cofre-v1`), sem variável nova.
+
+> **Atenção:** se o `AUTH_SECRET` mudar, o cofre deixa de abrir. Antes (ou logo depois) de trocar, recifre com a chave antiga → nova:
+>
+> ```powershell
+> $env:AUTH_SECRET_ANTIGO="<valor antigo>"; $env:AUTH_SECRET="<valor novo>"; $env:DATABASE_URL="<banco>"
+> npm run cofre:recifrar            # teste: confere se tudo abre, não grava
+> npm run cofre:recifrar -- --gravar  # recifra de verdade
+> ```
+
+Testes da criptografia: `npm run test:cofre`.

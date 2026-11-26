@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "prisma migrate deploy",
-    "db:status": "prisma migrate status"
+    "db:status": "prisma migrate status",
+    "test:cofre": "tsx --test lib/cofre/crypto.test.ts",
+    "cofre:recifrar": "tsx scripts/cofre-recifrar.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -37,6 +39,7 @@
     "prisma": "^5.10.2",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

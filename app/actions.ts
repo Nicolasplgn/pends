@@ -6,6 +6,9 @@ import { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, attemptLogin, isAuthenticated, requireAuth, sessionCookieOptions } from "../lib/session";
 import { obterResumoEu } from "../lib/eu";
+import * as cofre from "../lib/cofre/service";
+import { lerCsvDeSenhas } from "../lib/cofre/csv";
+import { emitirReauth, encerrarReauth, reauthAte } from "../lib/cofre/reauth";
 import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey } from "../lib/invoice";
 import {
   CURRENT_USER, parseLocalDateToMidday, round2, safeYearMonth, monthRange, todayMidday,
@@ -2023,3 +2026,104 @@ export async function moveColumn(columnId: string, direction: "left" | "right") 
 
   revalidatePath("/");
 }
+
+// ==========================================
+// 9. COFRE DE SENHAS
+// ==========================================
+// Senha e notas nunca saem daqui, exceto em revelarCredencialCofre (com reautenticação).
+// Erros voltam como { ok: false, erro } com mensagens genéricas, sem dado sensível.
+
+type CofreResp<T = object> = ({ ok: true } & T) | { ok: false; erro: string; precisaReauth?: boolean };
+
+function erroCofre(e: unknown): { ok: false; erro: string } {
+  // As mensagens do serviço do cofre não carregam segredos; qualquer outra vira genérica
+  const msg = e instanceof Error && e.message.length < 200 && !/prisma|invocation|\n/i.test(e.message) ? e.message : "Não foi possível concluir.";
+  return { ok: false, erro: msg };
+}
+
+export async function getCofre(filtros: { texto?: string; projeto?: string } = {}) {
+  await requireAuth();
+  const [credenciais, projetos, ate] = await Promise.all([
+    cofre.listarCredenciais(filtros),
+    cofre.projetosDoCofre(),
+    reauthAte(),
+  ]);
+  return { credenciais, projetos, reauthAte: ate };
+}
+
+/** Confirma a senha do Pends de novo; libera revelar/copiar/importar por 5 minutos. */
+export async function confirmarSenhaCofre(senha: string): Promise<CofreResp<{ ate: number }>> {
+  await requireAuth();
+  const res = await attemptLogin(process.env.AUTH_EMAIL ?? "", String(senha ?? "").slice(0, 200));
+  if (!res.ok) return { ok: false, erro: res.error };
+  return { ok: true, ate: await emitirReauth() };
+}
+
+export async function trancarCofre() {
+  await requireAuth();
+  await encerrarReauth();
+}
+
+export async function salvarCredencialCofre(id: string | null, dados: cofre.CredencialEntrada): Promise<CofreResp<{ id: string }>> {
+  await requireAuth();
+  try {
+    if (id) {
+      await cofre.editarCredencial(id, dados, "app");
+      return { ok: true, id };
+    }
+    return { ok: true, id: await cofre.criarCredencial(dados, "app") };
+  } catch (e) {
+    return erroCofre(e);
+  }
+}
+
+export async function apagarCredencialCofre(id: string): Promise<CofreResp> {
+  await requireAuth();
+  try {
+    await cofre.apagarCredencial(id, "app");
+    return { ok: true };
+  } catch (e) {
+    return erroCofre(e);
+  }
+}
+
+/** Devolve a senha (e as notas) aberta. Exige reautenticação válida. */
+export async function revelarCredencialCofre(
+  id: string,
+  modo: "revelou" | "copiou"
+): Promise<CofreResp<{ senha: string; notas: string | null; esconderEm: number }>> {
+  await requireAuth();
+  if (!(await reauthAte())) return { ok: false, erro: "Confirme sua senha do Pends para continuar.", precisaReauth: true };
+  try {
+    const r = await cofre.revelarCredencial(id, modo === "copiou" ? "copiou" : "revelou", "app");
+    // a tela esconde a senha revelada depois de 30 s
+    return { ok: true, senha: r.senha, notas: r.notas, esconderEm: Date.now() + 30_000 };
+  } catch (e) {
+    return erroCofre(e);
+  }
+}
+
+export async function historicoCredencialCofre(id: string) {
+  await requireAuth();
+  return cofre.historicoCredencial(id);
+}
+
+/** Importa o CSV exportado pelo Gerenciador de Senhas do Google. Exige reautenticação. */
+export async function importarSenhasCofre(
+  csv: string,
+  projeto: string | null
+): Promise<CofreResp<{ criadas: number; duplicadas: number; invalidas: number }>> {
+  await requireAuth();
+  if (!(await reauthAte())) return { ok: false, erro: "Confirme sua senha do Pends para importar.", precisaReauth: true };
+  if (typeof csv !== "string" || csv.length > 2_000_000) return { ok: false, erro: "Arquivo grande demais (máx. 2 MB)." };
+  const lido = lerCsvDeSenhas(csv);
+  if (lido.erro) return { ok: false, erro: lido.erro };
+  if (lido.linhas.length > 5000) return { ok: false, erro: "Arquivo com linhas demais (máx. 5.000)." };
+  try {
+    const r = await cofre.importarCredenciais(lido.linhas, projeto, "app");
+    return { ok: true, ...r };
+  } catch (e) {
+    return erroCofre(e);
+  }
+}
+

@@ -21,6 +21,7 @@ import { AnalyticsDash } from "./components/analytics/AnalyticsDash";
 import { KanbanBoard } from "./components/pipeline/KanbanBoard";
 import { FinancesHub } from "./components/finances/FinancesHub";
 import { TodayView } from "./components/today/TodayView";
+import { CofreView } from "./components/cofre/CofreView";
 
 import { CardDetailModal } from "./components/shared/CardDetailModal";
 import { ModuleModal } from "./components/shared/ModuleModal";
@@ -29,7 +30,7 @@ import { CommandPalette } from "./components/shared/CommandPalette";
 
 export default function PendsApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState<"today" | "neural" | "dashboard" | "kanban" | "finances">("today");
+  const [activeTab, setActiveTab] = useState<"today" | "neural" | "dashboard" | "kanban" | "finances" | "cofre">("today");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [modules, setModules] = useState<Module[]>([]);
@@ -298,7 +299,7 @@ export default function PendsApp() {
             <Menu size={20} />
           </button>
           <span className="font-bold text-sm uppercase tracking-wider font-mono text-white">
-            {activeTab === "today" ? "Hoje" : activeTab === "neural" ? "Visão Neural" : activeTab === "dashboard" ? "Painel" : activeTab === "kanban" ? "Pipeline" : "Finanças & Gastos"}
+            {activeTab === "today" ? "Hoje" : activeTab === "neural" ? "Visão Neural" : activeTab === "dashboard" ? "Painel" : activeTab === "kanban" ? "Pipeline" : activeTab === "cofre" ? "Cofre" : "Finanças & Gastos"}
           </span>
           <button
             onClick={() => setPaletteOpen(true)}
@@ -374,6 +375,8 @@ export default function PendsApp() {
             projectFilterRequest={pipelineProjectRequest}
           />
         )}
+
+        {activeTab === "cofre" && <CofreView modules={modules} />}
 
         {activeTab === "finances" && (
           <FinancesHub
