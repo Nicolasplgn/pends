@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, attemptLogin, isAuthenticated, requireAuth, sessionCookieOptions } from "../lib/session";
+import { obterResumoEu } from "../lib/eu";
 import { invoiceDueDate, invoiceFor, invoiceClosingDate, monthKey } from "../lib/invoice";
 import {
   CURRENT_USER, parseLocalDateToMidday, round2, safeYearMonth, monthRange, todayMidday,
@@ -220,6 +221,12 @@ export async function getDashboardStats() {
     }));
 
   return { total, completed, inProgress, todo, urgent, overdue, completionRate, moduleMetrics, upcomingDeadlines };
+}
+
+/** Seção "Eu" do Analytics: resumo do conector pessoal (cache de 5 min, nunca lança erro). */
+export async function getEuResumo() {
+  await requireAuth();
+  return obterResumoEu();
 }
 
 // ==========================================

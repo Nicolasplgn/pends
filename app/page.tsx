@@ -34,6 +34,8 @@ export default function PendsApp() {
 
   const [modules, setModules] = useState<Module[]>([]);
   const [projects, setProjects] = useState<Awaited<ReturnType<typeof getProjects>>>([]);
+  // Pedido para abrir o Pipeline já filtrado por um projeto (vem do Analytics)
+  const [pipelineProjectRequest, setPipelineProjectRequest] = useState<{ id: string; n: number }>({ id: "", n: 0 });
   const [columns, setColumns] = useState<KanbanColumn[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
@@ -347,6 +349,12 @@ export default function PendsApp() {
             onOpenFinances={() => setActiveTab("finances")}
             onCardClick={(cardId) => setSelectedCardId(cardId)}
             onGoToPipeline={(modId) => { setActiveModuleFilter(modId); setActiveTab("kanban"); }}
+            projects={projects}
+            onFilterProject={(projectId) => {
+              setActiveModuleFilter("all");
+              setPipelineProjectRequest((r) => ({ id: projectId, n: r.n + 1 }));
+              setActiveTab("kanban");
+            }}
           />
         )}
 
@@ -363,6 +371,7 @@ export default function PendsApp() {
             onQuickChangeModule={async (cardId, modId) => { await updateCardModule(cardId, modId || null); void loadAll(); }}
             onToggleComplete={async (cardId) => { await toggleCardCompletion(cardId); void loadAll(); }}
             onReload={loadAll}
+            projectFilterRequest={pipelineProjectRequest}
           />
         )}
 

@@ -4,6 +4,7 @@ import type { getBoardData, getCardDetails, getDashboardStats } from "../actions
 
 // IMPORTA E EXPORTA TUDO DO ARQUIVO FINANCEIRO
 export * from "./finance";
+export * from "./eu";
 
 export type BoardData = NonNullable<Awaited<ReturnType<typeof getBoardData>>>;
 export type KanbanColumn = BoardData["columns"][number];

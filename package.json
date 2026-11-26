@@ -16,6 +16,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@modelcontextprotocol/server": "^2.4.0",
     "@prisma/client": "^5.10.2",
+    "@vercel/oidc": "^5.0.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.561.0",
     "mcp-handler": "^2.4.0",
